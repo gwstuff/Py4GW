@@ -57,6 +57,18 @@ class Yield:
         while (time.time() - start) * 1000 < ms:
             yield
 
+    @staticmethod
+    def wait_until(exit_condition: Callable[[], bool], timeout_ms: int = -1):
+        import time
+        timeout_reached = lambda: False
+
+        if timeout_ms > -1:
+            start = time.time()
+            timeout_reached = lambda: (time.time() - start) * 1000 > timeout_ms
+
+        while not exit_condition() and not timeout_reached():
+            yield
+
 #region Player
     class Player:
         @staticmethod
@@ -704,7 +716,13 @@ class Yield:
             yield from _run_bt_tree(tree, throttle_ms=100)
             
         @staticmethod
-        def InteractWithNearestChest(max_distance:int = 2500, before_interact_fn = lambda: None, after_interact_fn = lambda: None):
+        def InteractWithNearestChest(
+            max_distance:int = 2500,
+            before_interact_fn = lambda: None,
+            after_interact_fn = lambda: None,
+            timeout_ms: int = 10000,
+            custom_exit_condition: Callable[[], bool] = lambda: False,
+            log: bool = False):
             """Target and interact with chest and items."""
             from .Agents import Agents
             
@@ -715,7 +733,17 @@ class Yield:
             chest_x, chest_y = Agent.GetXY(nearest_chest)
 
 
-            yield from Yield.Movement.FollowPath([(chest_x, chest_y)])
+            item_reached = yield from Yield.Movement.FollowPath(
+                [(chest_x, chest_y)],
+                timeout=timeout_ms,
+                custom_exit_condition=custom_exit_condition,
+                log=log)
+            
+            if not item_reached:
+                if log:
+                    ConsoleLog("InteractWithNearestChest", "Failed to reach chest, stopping interaction.", Console.MessageType.Warning)
+                return
+            
             yield from Yield.wait(500)
 
             before_interact_fn()
@@ -734,7 +762,7 @@ class Yield:
             after_interact_fn()
             
             yield from Yield.wait(1000)
-            
+
         @staticmethod
         def InteractWithAgentByName(agent_name:str):
             
@@ -1105,7 +1133,7 @@ class Yield:
             Inventory.SalvageItem(item_id, salvage_kit)
             
         @staticmethod
-        def SalvageItems(item_array:list[int], log=False):
+        def SalvageItems(item_array:list[int], log=False, wait_time_between_items_ms=100):
             from ..Py4GWcorelib import ActionQueueManager, ConsoleLog, Console
             from ..Inventory import Inventory
             
@@ -1125,7 +1153,7 @@ class Yield:
                     ActionQueueManager().AddAction("SALVAGE", Inventory.AcceptSalvageMaterialsWindow)
                     yield from Yield.Items._wait_for_empty_queue("SALVAGE")
                     
-                yield from Yield.wait(100)
+                yield from Yield.wait(wait_time_between_items_ms)
                 
             if log and len(item_array) > 0:
                 ConsoleLog("SalvageItems", f"Salvaged {len(item_array)} items.", Console.MessageType.Info)     
@@ -1159,14 +1187,14 @@ class Yield:
                 
                 
         @staticmethod
-        def DepositItems(item_array:list[int], log=False):
+        def DepositItems(item_array:list[int], log=False, Anniversary_panel=True, wait_time_between_items_ms=-1):
             from ..Py4GWcorelib import ActionQueueManager, ConsoleLog, Console
             
             if len(item_array) == 0:
                 ActionQueueManager().ResetQueue("ACTION")
                 return
             
-            total_items, total_capacity = GLOBAL_CACHE.Inventory.GetStorageSpace()
+            total_items, total_capacity = GLOBAL_CACHE.Inventory.GetStorageSpace(Anniversary_panel=Anniversary_panel)
             free_slots = total_capacity - total_items
             
             if free_slots <= 0:
@@ -1174,6 +1202,8 @@ class Yield:
 
             for item_id in item_array:
                 GLOBAL_CACHE.Inventory.DepositItemToStorage(item_id)
+                if wait_time_between_items_ms > 0:
+                    yield from Yield.wait(wait_time_between_items_ms)
                 
             while not ActionQueueManager().IsEmpty("ACTION"):
                 yield from Yield.wait(350)

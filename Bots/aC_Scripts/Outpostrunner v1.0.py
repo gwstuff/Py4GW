@@ -49,11 +49,11 @@ RUN_NAME_MAP = {
         "_1_AscalonCity_To_PikenSquare": "1 - Ascalon City -> Piken Square",
         "_2_PikenSquare_To_GrendichCourthouse": "2 - Piken Square -> Grendich Court House",
         "_3_GrendichCourthouse_To_YaksBend": "3 - Grendich Court House -> Yak's Bend",
-        "_4_YaksBend_To_IceToothCave": "4 - Yak's Bend -> Ice Tooth Cave",
-        "_5_IceToothCave_To_BeaconsPerch": "5 - IceTooth Cave -> Beacon's Perch",
-        "_6_BeaconsPerch_To_GatesOfKryta": "6 - Beacons Perch -> Gates Of Kryta",
-        "_7_GatesOfKryta_To_LionsArch": "7 - Gates Of Kryta -> Lion's Arch",
-
+        "_4_YaksBend_To_BorlisPass": "4 - Yak's Bend -> Borlis Pass",
+        "_5_YaksBend_To_IceToothCave": "5 - Yak's Bend -> Ice Tooth Cave",
+        "_6_IceToothCave_To_BeaconsPerch": "6 - IceTooth Cave -> Beacon's Perch",
+        "_7_BeaconsPerch_To_GatesOfKryta": "7 - Beacons Perch -> Gates Of Kryta",
+        "_8_GatesOfKryta_To_LionsArch": "8 - Gates Of Kryta -> Lion's Arch",
     },
     "Tyria - Beacon's Perch To Droknars Forge": {
         "_1_BeaconsPerch_To_CampRankor": "1 - Beacons Perch -> Camp Rankor",
@@ -73,14 +73,27 @@ RUN_NAME_MAP = {
         "_3_BergenHotSprings_To_BeetleTun": "3 - Bergen Hot Springs -> Beetletun",
         "_4_Beetletun_To_DivinityCoast": "4 - Beetletun -> Divinity Coast",
         "_5_BergenHotSprings_To_TempleOfTheAges": "5 - Bergen Hot Springs -> Temple Of The Ages",
-        "_6_templeoftheages_to_thewilds": "6 - Temple Of The Ages -> The Wilds",
-        "_7_thewildsoutpost_to_druidsoverlook": "7 - The Wilds Outpost -> Druid's Overlook",
-        "_8_druidsoverlook_to_quarrelfalls": "8 - Druid's Overlook -> Quarrel Falls",
-        "_9_quarrelfalls_to_bloodstonefenoutpost": "9 - Quarrel Falls -> Bloodstone Fen",
-        "_10_quarrelfalls_to_ventarisrefuge": "10 - Quarrel Falls -> Ventari's Refuge",
-        "_11_ventarisrefuge_to_auroragladeoutpost": "11 - Ventari's Refuge -> Aurora Glade",
-        "_12_auroragladeoutpost_to_maguumastade": "12 - Aurora Glade -> Maguuma Stade",
-        "_13_maguumastade_to_hengeofdenravi": "13 - Maguuma Stade -> Henge of Denravi",
+        "_6_TempleOfTheAges_To_FishermensHaven": "6 - Temple Of The Ages -> Fishermen's Haven",
+        "_7_FishermensHaven_To_SanctumCay": "7 - Fishermen's Haven -> Sanctum Cay",
+        "_8_FishermensHaven_To_RiversideProvince": "8 - Fishermen's Haven -> Riverside Province",
+    },
+    "Tyria - Maguuma Outposts": {
+        "_1_templeoftheages_to_thewilds": "1 - Temple Of The Ages -> The Wilds",
+        "_2_thewildsoutpost_to_druidsoverlook": "2 - The Wilds Outpost -> Druid's Overlook",
+        "_3_druidsoverlook_to_quarrelfalls": "3 - Druid's Overlook -> Quarrel Falls",
+        "_4_quarrelfalls_to_bloodstonefenoutpost": "4 - Quarrel Falls -> Bloodstone Fen",
+        "_5_quarrelfalls_to_ventarisrefuge": "5 - Quarrel Falls -> Ventari's Refuge",
+        "_6_ventarisrefuge_to_auroragladeoutpost": "6 - Ventari's Refuge -> Aurora Glade",
+        "_7_auroragladeoutpost_to_maguumastade": "7 - Aurora Glade -> Maguuma Stade",
+        "_8_maguumastade_to_hengeofdenravi": "8 - Maguuma Stade -> Henge of Denravi",
+    },
+    "Tyria - Desert Outposts": {
+        "_1_auguryrock_to_destinysgorge": "1 - Augury Rock -> Destiny's Gorge",
+        "_2_destinysgorge_to_thirstyriver": "2 - Destiny's Gorge -> Thirsty River",
+        "_3_destinysgorge_to_elonareach": "3 - Destiny's Gorge -> Elona Reach",
+        "_4_elonareach_to_seekerspassage": "4 - Elona Reach -> Seeker's Passage",
+        "_5_auguryrock_to_heroesaudience": "5 - Augury Rock -> Heroes Audience",
+        "_6_heroesaudience_to_dunesofdespair": "6 - Heroes Audience -> Dunes of Despair",
     },
     "NF - Istan island": {
         "_1_kamadanjewelofistan_to_sunspeargreathall": "1 - Kamadan -> Sunspear Greathall",
@@ -186,7 +199,7 @@ class ConsumablesHelper:
             if not Routines.Checks.Map.MapValid():
                 yield from Routines.Yield.wait(1000)
                 continue
-            if GLOBAL_CACHE.Agent.IsDead(GLOBAL_CACHE.Player.GetAgentID()):
+            if Agent.IsDead(Player.GetAgentID()):
                 yield from Routines.Yield.wait(1000)
                 continue
 
@@ -194,10 +207,14 @@ class ConsumablesHelper:
 
             if s.get("Cupcake", False):
                 yield from Routines.Yield.Upkeepers.Upkeep_BirthdayCupcake()
+            if s.get("CandyApple", False):
+                yield from Routines.Yield.Upkeepers.Upkeep_CandyApple()    
             if s.get("Alcohol", False):
                 yield from Routines.Yield.Upkeepers.Upkeep_Alcohol(target_alc_level=1 , disable_drunk_effects=True)
             if s.get("Morale", False):
                 yield from Routines.Yield.Upkeepers.Upkeep_Morale(110)
+            if s.get("WarSupplies", False):
+                yield from Routines.Yield.Upkeepers.Upkeep_WarSupplies()
             if s.get("CitySpeed", False):
                 yield from Routines.Yield.Upkeepers.Upkeep_City_Speed()
 
@@ -364,10 +381,17 @@ def draw_ui():
 
                     ConsoleLog("OutpostRunner",f"Added all runs from region {selected_region}",Console.MessageType.Debug)
 
+                PyImGui.same_line(0, 5)
+                if selected_chain:
+                    if PyImGui.button("Clear"):
+                        selected_chain.clear()
+                        runner_fsm.map_chain = []
+                        ConsoleLog("OutpostRunner", "Cleared runs chain", Console.MessageType.Debug)
+
             PyImGui.separator()
 
-            PyImGui.text("Current Chain:")
             if selected_chain:
+                PyImGui.text("Current Chain:")
                 for idx, run in enumerate(sorted(selected_chain, key=lambda r: r.order)):
                     PyImGui.text(run.display)
                     PyImGui.same_line(0, 0)
@@ -458,7 +482,7 @@ def get_full_texture_path(skill_id: int) -> str:
     """Resolve a skill ID to a full absolute texture path."""
     relative_path = GLOBAL_CACHE.Skill.ExtraData.GetTexturePath(skill_id)
     if not relative_path:
-        return None
+        return ""
     texture_path = os.path.join(PY4GW_ROOT, relative_path)
     return os.path.normpath(texture_path)
 
@@ -568,10 +592,10 @@ if not os.path.exists(OUTPOST_PATH_DIR):
     os.makedirs(OUTPOST_PATH_DIR)
 
 def get_map_name():
-    return GLOBAL_CACHE.Map.GetMapName()
+    return Map.GetMapName()
 
 def get_map_id():
-    return GLOBAL_CACHE.Map.GetMapID()
+    return Map.GetMapID()
 
 def reset_state():
     state["active"] = False
@@ -658,13 +682,13 @@ def render_path_ui():
 
             reset_state()
 
-    x, y = GLOBAL_CACHE.Player.GetXY()
+    x, y = Player.GetXY()
     PyImGui.text(f"Player Pos: ({int(x)}, {int(y)})")
     if PyImGui.button("Copy position"):
-        PyImGui.set_clipboard_text(f"{int(x)}, {int(y)})")
+        PyImGui.set_clipboard_text(f"({int(x)}, {int(y)}),")
 
     # Facing vector from heading
-    heading = GLOBAL_CACHE.Agent.GetRotationAngle(Player.GetAgentID())
+    heading = Agent.GetRotationAngle(Player.GetAgentID())
     facing_vec = (math.cos(heading), math.sin(heading))
 
     # Projected point 1000 units forward
@@ -673,7 +697,7 @@ def render_path_ui():
 
     PyImGui.text(f"Facing Point (+500): ({projected_x}, {projected_y})")
     if PyImGui.button("Copy Portal point"):
-        PyImGui.set_clipboard_text(f"{projected_x}, {projected_y}")
+        PyImGui.set_clipboard_text(f"({projected_x}, {projected_y}),")
 
     
     PyImGui.end()
@@ -682,7 +706,7 @@ def log_path():
     if not state["active"]:
         return
 
-    x, y = GLOBAL_CACHE.Player.GetXY()
+    x, y = Player.GetXY()
     current_map_id = get_map_id()
 
     if (x, y) == (0, 0):
@@ -728,7 +752,7 @@ def log_path():
         ConsoleLog("Logger", f"Started new segment in: {state['current_segment_name']}", Console.MessageType.Info)
         return
 
-    threshold = 1000 if state["mode"] == "outpost" else 2000
+    threshold = 100  # record more frequent points (denser sampling for better path fidelity)
     if (x, y) != (0, 0):
         if state["last_pos"] is None or Utils.Distance((x, y), state["last_pos"]) >= threshold:
             state["prev_last_pos"] = state.get("last_pos")
@@ -786,14 +810,14 @@ def main():
 
         if PyImGui.begin("Pathing Test", PyImGui.WindowFlags.AlwaysAutoResize):
 
-            player_pos = GLOBAL_CACHE.Player.GetXY()
-            player_z = GLOBAL_CACHE.Agent.GetZPlane(GLOBAL_CACHE.Player.GetAgentID())
-            map_id = PyMap.PyMap().map_id.ToInt()
+            player_pos = Player.GetXY()
+            player_z = Agent.GetZPlane(Player.GetAgentID())
+            map_id = Map.GetMapID()
             x = PyImGui.input_int("Target X", x)
             y = PyImGui.input_int("Target Y", y)
 
             if PyImGui.button("Capture Start Position"):
-                player_pos = GLOBAL_CACHE.Player.GetXY()
+                player_pos = Player.GetXY()
                 x = int(player_pos[0])
                 y = int(player_pos[1])
                 print(f"Captured start position: ({x}, {y})")
@@ -810,7 +834,7 @@ def main():
                 path_requested = True
                 def search_path_coroutine():
                     global result_path, path_requested, elapsed_time
-                    zplane = GLOBAL_CACHE.Agent.GetZPlane(GLOBAL_CACHE.Player.GetAgentID())
+                    zplane = Agent.GetZPlane(Player.GetAgentID())
                     result_path = yield from pathing_object.get_path(
                         (player_pos[0], player_pos[1], zplane),
                         (x, y, zplane),

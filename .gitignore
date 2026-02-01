@@ -3,12 +3,29 @@ accounts.json
 accounts - Copy.json
 Py4GW_Launcher.exe
 
+GodTools.py
+god_tools_src/*
+
+# 1. Ignore ALL .ini files in Settings and subfolders
+Settings/**/*.ini
+# 2. Ignore ALL directories in Settings root
+Settings/*/
+# 3. BUT keep the Defaults directory
+!Settings/Defaults/
+# 4. Keep ALL contents of Defaults directory
+!Settings/Defaults/**
+
 imgui.ini
 Inject.au3
 AlcoholProc.ini
 alcohol_procs.json
 Widgets/Config/Travel.ini
 Widgets/Config/*
+Widgets/Data/Inventory/**
+Widgets/Data/InventoryModelIds/**
+Widgets/Data/InventoryModHash/**
+Bots/marks_coding_corner/alcohol_procs.ini
+Bots/marks_coding_corner/**.json
 
 !Widgets/Config/textures/
 !Widgets/Config/textures/**
@@ -176,11 +193,19 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
 
 /Multiboxer
 .isort.cfg
-Styles/Minimalus.json
-Styles/ImGui.json
-Styles/Guild_Wars.json
-Widgets/Mission Map +.py
+
+# Ignore all files in Styles
+/Styles
+
+# # But keep the .default.json ones
+!/Styles/*.default.json
+
+# Ignore Visual Studio Code settings folder
+.vscode/
+
+# macOS system files
+.DS_Store

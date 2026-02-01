@@ -1,36 +1,23 @@
-from asyncio import wait_for
-import math
 import time
 from collections.abc import Generator
-from typing import Any, Callable, List, Optional, Tuple
 from dataclasses import dataclass
+from functools import reduce
+from typing import Any, Callable, Optional, Tuple
 
-from HeroAI.cache_data import CacheData
-from HeroAI.windows import skill_slot
-from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers_tests
+from Py4GWCoreLib.GlobalCache.SharedMemory import AccountData
+from Py4GWCoreLib.enums_src.Model_enums import GadgetModelID
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
-from Widgets.CustomBehaviors.primitives.skills.custom_skill import CustomSkill
+from Widgets.CustomBehaviors.primitives.helpers.custom_behavior_helpers_target import CustomTargeting
 from Widgets.CustomBehaviors.primitives.helpers.targeting_order import TargetingOrder
+from Widgets.CustomBehaviors.primitives.helpers.sortable_agent_data import SortableAgentData
+from Widgets.CustomBehaviors.primitives.parties.memory_cache_manager import MemoryCacheManager
+from Widgets.CustomBehaviors.primitives.skills.custom_skill import CustomSkill
 
-cached_data = CacheData()
+from Py4GWCoreLib import GLOBAL_CACHE, Agent, Player, Overlay, SkillBar, ActionQueueManager, Routines, Range, Utils, SPIRIT_BUFF_MAP, SpiritModelID, AgentArray
+from Widgets.CustomBehaviors.primitives import constants
+from Widgets.CustomBehaviors.primitives.helpers.custom_behavior_helpers_party import CustomBehaviorHelperParty
 
-from Py4GWCoreLib import GLOBAL_CACHE, Overlay, SkillBar, ActionQueueManager, Routines, ConsoleLog, Range, Utils, SPIRIT_BUFF_MAP, SpiritModelID, AgentArray
-from Widgets.CustomBehaviors.primitives.constants import DEBUG
-
-LOG_TO_CONSOLE:bool = True
 MODULE_NAME = "Custom Combat Behavior Helpers"
-
-@dataclass
-class SortableAgentData:
-    agent_id: int
-    distance_from_player: float
-    hp: float
-    is_caster: bool
-    is_melee: bool
-    is_martial: bool
-    enemy_quantity_within_range: int
-    agent_quantity_within_range: int
-    energy: float
 
 @dataclass
 class SpiritAgentData:
@@ -73,7 +60,7 @@ class Helpers:
         activation_time = GLOBAL_CACHE.Skill.Data.GetActivation(skill_casted.skill_id) * 1000
         aftercast = GLOBAL_CACHE.Skill.Data.GetAftercast(skill_casted.skill_id) * 1000
         delay = activation_time if activation_time > aftercast else aftercast
-        print(f"{skill_casted.skill_name} let's wait for aftercast :{delay}ms | activation_time:{activation_time} | aftercast:{aftercast}")
+        if constants.DEBUG: print(f"{skill_casted.skill_name} let's wait for aftercast :{delay}ms | activation_time:{activation_time} | aftercast:{aftercast}")
 
         yield from Helpers.wait_for(delay + 200)  # 200ms more to really avoid double-cast
 
@@ -84,7 +71,7 @@ class Helpers:
         while (time.time() - start_time) < milliseconds / 1000:
             action_result: BehaviorResult = yield from action()
             if action_result == BehaviorResult.ACTION_PERFORMED:
-                print(f"wait_for_or_until_completion has reached completion : {milliseconds}ms")
+                if constants.DEBUG: print(f"wait_for_or_until_completion has reached completion : {milliseconds}ms")
                 return BehaviorResult.ACTION_PERFORMED
             yield 'wait'  # Pause and allow resumption while waiting
         return BehaviorResult.ACTION_SKIPPED
@@ -108,22 +95,77 @@ class Helpers:
             
             yield from Helpers.wait_for(100)
 
-        print(f"wait_for_condition_before_execution has reached completion : {milliseconds}ms")
+        if constants.DEBUG: print(f"wait_for_condition_before_execution has reached completion : {milliseconds}ms")
         action_result: BehaviorResult = yield from action()
         return action_result
 
 class Resources:
 
     @staticmethod
+    def get_nearest_dungeon_chest(max_distance: int) -> int | None:
+        
+        valid_chest_ids = [
+            GadgetModelID.CHEST_DUNGEON_SECRET_LAIR_OF_THE_SNOWMAN.value,
+            GadgetModelID.CHEST_DUNGEON_BOGROOT_GROWTHS.value,
+            GadgetModelID.CHEST_DUNGEON_SLAVERS_EXILE_JUSTICIAR_THOMMIS_ROOM.value,
+
+            GadgetModelID.BURIED_TREASURE_THE_MIRROR_OF_LYSS.value,
+            GadgetModelID.BURIED_TREASURE_NIGHTFALLEN_JAHAI_AND_DOMAIN_OF_PAIN_AND_KODLONU_HAMLET.value,
+        ]
+
+        gadget_array = AgentArray.GetGadgetArray()
+        gadget_array = AgentArray.Filter.ByDistance(gadget_array, Player.GetXY(), max_distance)
+        gadget_array = AgentArray.Sort.ByDistance(gadget_array, Player.GetXY())
+
+        for agent_id in gadget_array:
+            gadget_id = Agent.GetGadgetID(agent_id)
+            if gadget_id in valid_chest_ids:
+                return agent_id
+
+        return None
+    
+    @staticmethod
+    def get_nearest_locked_chest(max_distance: int) -> int | None:
+        
+        valid_chest_ids = [
+            GadgetModelID.CHEST_HIDDEN_STASH.value,
+            GadgetModelID.CHEST_ASCALONIAN.value,
+            GadgetModelID.CHEST_SHING_JEA.value,
+            GadgetModelID.CHEST_KOURNAN.value,
+            GadgetModelID.CHEST_DARKSTONE.value,
+            GadgetModelID.CHEST_GENERIC.value,
+        ]
+
+        gadget_array = AgentArray.GetGadgetArray()
+        gadget_array = AgentArray.Filter.ByDistance(gadget_array, Player.GetXY(), max_distance)
+        gadget_array = AgentArray.Sort.ByDistance(gadget_array, Player.GetXY())
+
+        for agent_id in gadget_array:
+            gadget_id = Agent.GetGadgetID(agent_id)
+            if gadget_id in valid_chest_ids:
+                return agent_id
+
+        return None
+
+    @staticmethod
     def is_player_holding_an_item() -> bool:
-        weapon_type, _ = GLOBAL_CACHE.Agent.GetWeaponType(GLOBAL_CACHE.Player.GetAgentID())
+        weapon_type, _ = Agent.GetWeaponType(Player.GetAgentID())
         if weapon_type == 0:
             return True
         return False
+    
+    @staticmethod
+    def is_party_dead() -> bool:
+        players = GLOBAL_CACHE.Party.GetPlayers()
+        for player in players:
+            agent_id = GLOBAL_CACHE.Party.Players.GetAgentIDByLoginNumber(player.login_number)
+            if Agent.IsDead(agent_id) == False:
+                return False
+        return True
 
     @staticmethod
     def has_enough_resources(skill_casted: CustomSkill):
-        player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+        player_agent_id = Player.GetAgentID()
 
         adrenaline_required = GLOBAL_CACHE.Skill.Data.GetAdrenaline(skill_casted.skill_id)
         adrenaline_a = GLOBAL_CACHE.SkillBar.GetSkillData(skill_casted.skill_slot).adrenaline_a
@@ -147,17 +189,17 @@ class Resources:
         should be part of core libs (fix GetEnergyCostWithEffects)
         '''
 
-        player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+        player_agent_id = Player.GetAgentID()
 
         def get_attribute_level(attribute_name):
-            attributes = GLOBAL_CACHE.Agent.GetAttributes(player_agent_id)
+            attributes = Agent.GetAttributes(player_agent_id)
             for attr in attributes:
                 if attr.GetName() == attribute_name:
                     return attr.level
             return 0
 
         energy_cost = Routines.Checks.Skills.GetEnergyCostWithEffects(skill.skill_id, player_agent_id)
-        profession = GLOBAL_CACHE.Agent.GetProfessionNames(player_agent_id)[0]
+        profession = Agent.GetProfessionNames(player_agent_id)[0]
         skill_type = GLOBAL_CACHE.Skill.GetType(skill.skill_id)[1]
 
         if profession == "Dervish" and skill_type == "Enchantment":
@@ -172,48 +214,62 @@ class Resources:
 
     @staticmethod
     def get_energy_percent_in_party(agent_id):
-        import HeroAI.shared_memory_manager as shared_memory_manager
-        shared_memory_handler = shared_memory_manager.SharedMemoryManager()
 
-        from HeroAI.constants import MAX_NUM_PLAYERS
-        for i in range(MAX_NUM_PLAYERS):
-            player_data = shared_memory_handler.get_player(i)
-            if player_data and player_data["IsActive"] and player_data["PlayerID"] == agent_id:
-                return player_data["Energy"]
+        accounts:list[AccountData] = GLOBAL_CACHE.ShMem.GetAllAccountData()
+        for account in accounts:
+            if agent_id == account.PlayerID:
+                return account.PlayerEnergy
         return 1.0  # default return full energy to prevent issues
 
     @staticmethod
     def get_player_absolute_health() -> float:
-        player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
-        current_heath_percent = GLOBAL_CACHE.Agent.GetHealth(player_agent_id)
-        heath_max = GLOBAL_CACHE.Agent.GetMaxHealth(player_agent_id)
-        current_heath = current_heath_percent * heath_max
-        return current_heath
+        player_agent_id = Player.GetAgentID()
+        current_heath_percent = Agent.GetHealth(player_agent_id)
+        heath_max = Agent.GetMaxHealth(player_agent_id)
+        return current_heath_percent * heath_max
 
     @staticmethod
     def get_player_absolute_energy() -> float:
-        player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
-        current_energy_percent = GLOBAL_CACHE.Agent.GetEnergy(player_agent_id)
-        energy_max = GLOBAL_CACHE.Agent.GetMaxEnergy(player_agent_id)
-        current_energy = current_energy_percent * energy_max
-        return current_energy
+        player_agent_id = Player.GetAgentID()
+        current_energy_percent = Agent.GetEnergy(player_agent_id)
+        energy_max = Agent.GetMaxEnergy(player_agent_id)
+        return current_energy_percent * energy_max
+
+    @staticmethod
+    def player_can_sacrifice_health(
+        percentage_to_sacrifice: int,
+        min_health_percent_left = 0.3,
+        min_health_absolute_left = 175,
+    ) -> bool:
+        player_max_health = Agent.GetMaxHealth(Player.GetAgentID())
+        amount_we_will_sacrifice = player_max_health * percentage_to_sacrifice / 100
+        player_current_health = Resources.get_player_absolute_health()
+        health_after_sacrifice = player_current_health - amount_we_will_sacrifice
+
+        return (health_after_sacrifice > min_health_absolute_left
+                and health_after_sacrifice / player_max_health > min_health_percent_left)
+
+    @staticmethod
+    def get_skill_recharge_time_remaining_in_milliseconds(skill: CustomSkill) -> float:
+        return GLOBAL_CACHE.SkillBar.GetSkillData(skill.skill_slot).get_recharge
 
     @staticmethod
     def is_spirit_exist(
             within_range: Range,
             associated_to_skill: Optional[CustomSkill] = None,
             condition: Optional[Callable[[int], bool]] = None) -> bool:
-        spirit_array = GLOBAL_CACHE.AgentArray.GetSpiritPetArray()
-        spirit_array = AgentArray.Filter.ByDistance(spirit_array, GLOBAL_CACHE.Player.GetXY(), within_range.value)
-        spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
-        spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: GLOBAL_CACHE.Agent.IsSpawned(agent_id))
+
+        spirit_array = AgentArray.GetSpiritPetArray()
+        spirit_array = AgentArray.Filter.ByDistance(spirit_array, Player.GetXY(), within_range.value)
+        spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: Agent.IsAlive(agent_id))
+        spirit_array = AgentArray.Filter.ByCondition(spirit_array, lambda agent_id: Agent.IsSpawned(agent_id))
         
         if condition is not None:
             spirit_array = AgentArray.Filter.ByCondition(spirit_array, condition)
 
         if associated_to_skill is not None:
             for spirit_id in spirit_array:
-                model_value = GLOBAL_CACHE.Agent.GetPlayerNumber(spirit_id)
+                model_value = Agent.GetPlayerNumber(spirit_id)
 
                 # Check if model_value is valid for SpiritModelID Enum
                 if model_value in SpiritModelID._value2member_map_:
@@ -223,6 +279,26 @@ class Resources:
             return False
 
         return len(spirit_array) > 0
+    
+    @staticmethod
+    def is_ally_under_specific_effect(agent_id: int, skill_id: int) -> bool:
+        if agent_id == Player.GetAgentID() :
+            # if target is the player, check if the player has the effect
+            has_buff: bool = Routines.Checks.Effects.HasBuff(Player.GetAgentID(), skill_id)
+            return has_buff
+        else:
+            # else check if the party target has the effect
+            # we should also deep dive inside player.pet
+
+            accounts:list[AccountData] = GLOBAL_CACHE.ShMem.GetAllAccountData()
+            for account in accounts:
+                if account.PlayerID == agent_id:
+
+                    for buff in account.PlayerData.BuffData:
+                        if buff.SkillId == skill_id:
+                            return True
+
+        return False
 
 class Actions:
 
@@ -243,27 +319,7 @@ class Actions:
         return BehaviorResult.ACTION_SKIPPED
 
     @staticmethod
-    def auto_attack(target_id: Optional[int] = None) -> Generator[Any, Any, Any]:
-
-        if GLOBAL_CACHE.Agent.IsAttacking(GLOBAL_CACHE.Player.GetAgentID()):
-            yield
-            return BehaviorResult.ACTION_SKIPPED
-
-        if target_id is None:
-            target_id = Routines.Agents.GetNearestEnemy(Range.Spellcast.value)
-
-        if GLOBAL_CACHE.Agent.IsValid(target_id):
-            ActionQueueManager().AddAction("ACTION", GLOBAL_CACHE.Player.ChangeTarget, target_id)
-            ActionQueueManager().AddAction("ACTION", GLOBAL_CACHE.Player.Interact, target_id, False)
-            # GLOBAL_CACHE.Player.ChangeTarget(target_id)
-
-            yield from Helpers.wait_for(100)
-            return BehaviorResult.ACTION_PERFORMED
-        # else:
-        # print(f"auto_attack target is not valid {target_id}")
-
-    @staticmethod
-    def cast_skill_to_lambda(skill: CustomSkill, select_target: Optional[Callable[[], int]]) -> Generator[Any, Any, BehaviorResult]:
+    def cast_skill_to_lambda(skill: CustomSkill, select_target: Optional[Callable[[], int | None]]) -> Generator[Any, Any, BehaviorResult]:
 
         if not Routines.Checks.Skills.IsSkillSlotReady(skill.skill_slot):
             yield
@@ -282,9 +338,12 @@ class Actions:
                 return BehaviorResult.ACTION_SKIPPED
             target_agent_id = selected_target
 
-        if target_agent_id is not None: Routines.Sequential.Agents.ChangeTarget(target_agent_id)
+        if target_agent_id is not None: 
+            Player.ChangeTarget(target_agent_id)
+            yield from Helpers.wait_for(50)
+            
         Routines.Sequential.Skills.CastSkillSlot(skill.skill_slot)
-        if DEBUG: print(f"cast_skill_to_target {skill.skill_name} to {target_agent_id}")
+        if constants.DEBUG: print(f"cast_skill_to_target {skill.skill_name} to {target_agent_id}")
         yield from Helpers.delay_aftercast(skill)
         return BehaviorResult.ACTION_PERFORMED
 
@@ -297,43 +356,6 @@ class Actions:
         return (yield from Actions.cast_skill_to_lambda(skill, select_target=None))
 
     @staticmethod
-    def cast_skill_generic(skill: CustomSkill) -> Generator[Any, Any, BehaviorResult]:
-
-        if cached_data.combat_handler is None: print("combat_handler is None")
-        if cached_data.combat_handler.skills is None:
-            try:
-                cached_data.combat_handler.PrioritizeSkills()
-            except Exception as e:
-                print(f"echec {e}")
-        if cached_data.combat_handler.skills is None:
-            print("combat_handler.skills is None")
-            yield
-            return BehaviorResult.ACTION_SKIPPED
-
-        def find_order():
-            for index, generic_skill in enumerate(cached_data.combat_handler.skills):
-                if generic_skill.skill_id == skill.skill_id:
-                    return index  # Returning order (1-based index)
-            return -1  # Return -1 if skill_id not found
-
-        order = find_order()
-
-        is_ready_to_cast, target_agent_id = cached_data.combat_handler.IsReadyToCast(order)
-
-        if not is_ready_to_cast:
-            yield
-            return BehaviorResult.ACTION_SKIPPED
-
-        # option1
-        if target_agent_id is not None: Routines.Sequential.Agents.ChangeTarget(target_agent_id)
-        Routines.Sequential.Skills.CastSkillID(skill.skill_id)
-        # option2
-        # ActionQueueManager().AddAction("ACTION", SkillBar.UseSkill, skill_slot, target_agent_id)
-        if DEBUG: print(f"cast_skill_to_target {skill.skill_name} to {target_agent_id}")
-        yield from Helpers.delay_aftercast(skill)
-        return BehaviorResult.ACTION_PERFORMED
-
-    @staticmethod
     def cast_effect_before_expiration(skill: CustomSkill, time_before_expire: int) -> Generator[Any, Any, BehaviorResult]:
         if not Routines.Checks.Skills.IsSkillSlotReady(skill.skill_slot):
             yield
@@ -343,11 +365,11 @@ class Actions:
             yield
             return BehaviorResult.ACTION_SKIPPED
 
-        has_buff = Routines.Checks.Effects.HasBuff(GLOBAL_CACHE.Player.GetAgentID(), skill.skill_id)
-        buff_time_remaining = GLOBAL_CACHE.Effects.GetEffectTimeRemaining(GLOBAL_CACHE.Player.GetAgentID(), skill.skill_id) if has_buff else 0
+        has_buff = Routines.Checks.Effects.HasBuff(Player.GetAgentID(), skill.skill_id)
+        buff_time_remaining = GLOBAL_CACHE.Effects.GetEffectTimeRemaining(Player.GetAgentID(), skill.skill_id) if has_buff else 0
         if not has_buff or buff_time_remaining <= time_before_expire:
             ActionQueueManager().AddAction("ACTION", SkillBar.UseSkill, skill.skill_slot, 0)
-            if DEBUG: print(f"cast_effect_before_expiration {skill.skill_name}")
+            if constants.DEBUG: print(f"cast_effect_before_expiration {skill.skill_name}")
             yield from Helpers.delay_aftercast(skill)
             return BehaviorResult.ACTION_PERFORMED
 
@@ -361,14 +383,14 @@ class Targets:
         '''
         find position that will cover max allies within range
         '''
-        OVERLAY_DEBUG = True
-        player_x, player_y, player_z = GLOBAL_CACHE.Agent.GetXYZ(GLOBAL_CACHE.Player.GetAgentID()) #cached_data.data.player_xyz # needs to be live
+        OVERLAY_DEBUG = constants.DEBUG
+        player_x, player_y, player_z = Agent.GetXYZ(Player.GetAgentID()) #cached_data.data.player_xyz # needs to be live
         if OVERLAY_DEBUG: Overlay().BeginDraw()
         
-        player_position: tuple[float, float] = GLOBAL_CACHE.Player.GetXY()
-        other_party_member_positions = [GLOBAL_CACHE.Agent.GetXY(agent_id) for agent_id in agent_ids]
-        # other_party_member_positions: list[tuple[float, float]] = [GLOBAL_CACHE.Agent.GetXY(agent_id) for agent_id in GLOBAL_CACHE.AgentArray.GetAllyArray() if agent_id != GLOBAL_CACHE.Player.GetAgentID()]
-        # other_party_member_positions: list[tuple[float, float]] = [GLOBAL_CACHE.Agent.GetXY(agent_id) for agent_id in GLOBAL_CACHE.AgentArray.GetAllyArray()]
+        player_position: tuple[float, float] = Player.GetXY()
+        other_party_member_positions = [Agent.GetXY(agent_id) for agent_id in agent_ids]
+        # other_party_member_positions: list[tuple[float, float]] = [Agent.GetXY(agent_id) for agent_id in GLOBAL_CACHE.AgentArray.GetAllyArray() if agent_id != Player.GetAgentID()]
+        # other_party_member_positions: list[tuple[float, float]] = [Agent.GetXY(agent_id) for agent_id in GLOBAL_CACHE.AgentArray.GetAllyArray()]
         seek_range: float = range_to_cover.value - 50
         
         if OVERLAY_DEBUG: Overlay().DrawPoly3D(player_x, player_y, player_z, seek_range, Utils.RGBToColor(255, 128, 0 , 128), numsegments=32, thickness=5.0)
@@ -405,23 +427,73 @@ class Targets:
 
     @staticmethod
     def is_player_close_to_combat() -> bool:
-        enemy_id = Routines.Agents.GetNearestEnemy(Range.Spellcast.value + 250, aggressive_only=False)
-        if enemy_id is not None and enemy_id > 0 and GLOBAL_CACHE.Agent.IsValid(enemy_id): return True
+
+        enemy_id = Targets.get_nearest_or_default_from_enemy_ordered_by_priority(
+            within_range = Range.Spellcast.value + 350,
+            should_prioritize_party_target=False,
+            condition = lambda agent_id: not Agent.IsAggressive(agent_id),
+        )
+        if enemy_id is not None and enemy_id > 0 and Agent.IsValid(enemy_id): return True
         return False
 
     @staticmethod
     def is_player_in_aggro() -> bool:
-        enemy_aggressive_id = Routines.Agents.GetNearestEnemy(Range.Spellcast.value + 250, aggressive_only=True)
-        if enemy_aggressive_id is not None and enemy_aggressive_id > 0 and GLOBAL_CACHE.Agent.IsValid(enemy_aggressive_id): return True
+        
+        enemy_aggressive_id = Targets.get_nearest_or_default_from_enemy_ordered_by_priority(
+            within_range = Range.Spellcast.value + 400,
+            should_prioritize_party_target=False,
+            condition = lambda agent_id: Agent.IsAggressive(agent_id))
+        if enemy_aggressive_id is not None and enemy_aggressive_id > 0 and Agent.IsValid(enemy_aggressive_id): return True
 
-        enemy_id = Routines.Agents.GetNearestEnemy(Range.Spellcast.value, aggressive_only=False)
-        if enemy_id is not None and enemy_id > 0 and GLOBAL_CACHE.Agent.IsValid(enemy_id): return True
+        enemy_id = Targets.get_nearest_or_default_from_enemy_ordered_by_priority(
+            within_range = Range.Spellcast.value,
+            should_prioritize_party_target=False,
+            condition = lambda agent_id: not Agent.IsAggressive(agent_id))
+        if enemy_id is not None and enemy_id > 0 and Agent.IsValid(enemy_id): return True
 
         return False
 
     @staticmethod
-    def is_party_in_combat() -> bool:
-        # todo to implement through shared_memory
+    def is_party_member_in_aggro(agent_id:int) -> bool:
+        
+        agent_pos:tuple[float, float] = Agent.GetXY(agent_id)
+
+        enemy_aggressive_id = Targets.get_nearest_or_default_from_enemy_ordered_by_priority_custom_source(
+            source_agent_pos=agent_pos,
+            within_range = Range.Spellcast.value + 400,
+            should_prioritize_party_target=False,
+            condition = lambda agent_id: Agent.IsAggressive(agent_id))
+        if enemy_aggressive_id is not None and enemy_aggressive_id > 0 and Agent.IsValid(enemy_aggressive_id): return True
+
+        enemy_id = Targets.get_nearest_or_default_from_enemy_ordered_by_priority_custom_source(
+            source_agent_pos=agent_pos,
+            within_range = Range.Spellcast.value,
+            should_prioritize_party_target=False,
+            condition = lambda agent_id: not Agent.IsAggressive(agent_id))
+        if enemy_id is not None and enemy_id > 0 and Agent.IsValid(enemy_id): return True
+
+        return False
+
+    @staticmethod
+    def is_party_leader_in_aggro() -> bool:
+        
+        party_leader_id:int = CustomBehaviorHelperParty.get_party_leader_id()
+        if Targets.is_party_member_in_aggro(party_leader_id): return True
+        return False
+
+    @staticmethod
+    def is_party_in_aggro() -> bool:
+        
+        # doing such thing for whole party is too costly
+        #return False
+
+        players = GLOBAL_CACHE.Party.GetPlayers()
+        for player in players:
+            agent_id = GLOBAL_CACHE.Party.Players.GetAgentIDByLoginNumber(player.login_number)
+            if Targets.is_party_member_in_aggro(agent_id):
+                return agent_id
+
+        # todo to implement
         return False
 
     @staticmethod
@@ -429,21 +501,21 @@ class Targets:
             within_range: Range,
             spirit_model_ids: list[SpiritModelID] | None = None,
             condition: Optional[Callable[[int], bool]] = None) -> list[SpiritAgentData]:
-        spirit_agent_ids = GLOBAL_CACHE.AgentArray.GetSpiritPetArray()
-        spirit_agent_ids = AgentArray.Filter.ByDistance(spirit_agent_ids, GLOBAL_CACHE.Player.GetXY(), within_range.value)
-        spirit_agent_ids = AgentArray.Filter.ByCondition(spirit_agent_ids, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
+        spirit_agent_ids = AgentArray.GetSpiritPetArray()
+        spirit_agent_ids = AgentArray.Filter.ByDistance(spirit_agent_ids, Player.GetXY(), within_range.value)
+        spirit_agent_ids = AgentArray.Filter.ByCondition(spirit_agent_ids, lambda agent_id: Agent.IsAlive(agent_id))
         if condition is not None:
             spirit_agent_ids = AgentArray.Filter.ByCondition(spirit_agent_ids, condition)
 
         if spirit_model_ids is not None:
-            spirit_agent_ids = AgentArray.Filter.ByCondition(spirit_agent_ids, lambda agent_id: GLOBAL_CACHE.Agent.GetPlayerNumber(agent_id) in spirit_model_ids)
+            spirit_agent_ids = AgentArray.Filter.ByCondition(spirit_agent_ids, lambda agent_id: Agent.GetPlayerNumber(agent_id) in spirit_model_ids)
 
         spirit_data: list[SpiritAgentData] = []
         for spirit_agent_id in spirit_agent_ids:
             spirit_data.append(SpiritAgentData(
                 agent_id=spirit_agent_id,
-                distance_from_player=Utils.Distance(GLOBAL_CACHE.Agent.GetXY(spirit_agent_id), GLOBAL_CACHE.Player.GetXY()),
-                hp=GLOBAL_CACHE.Agent.GetHealth(spirit_agent_id)
+                distance_from_player=Utils.Distance(Agent.GetXY(spirit_agent_id), Player.GetXY()),
+                hp=Agent.GetHealth(spirit_agent_id)
             ))
 
         return spirit_data
@@ -459,31 +531,31 @@ class Targets:
 
     @staticmethod
     def get_all_possible_allies_ordered_by_priority_raw(
-            within_range: Range,
+            within_range: float,
             condition: Callable[[int], bool] | None = None,
             sort_key: tuple[TargetingOrder, ...] | None = None,
             range_to_count_enemies: float | None = None,
             range_to_count_allies: float | None = None) -> list[SortableAgentData]:
 
-        player_pos: tuple[float, float] = GLOBAL_CACHE.Player.GetXY()
-        agent_ids: list[int] = GLOBAL_CACHE.AgentArray.GetAllyArray()
-        all_enemies_ids: list[int] = GLOBAL_CACHE.AgentArray.GetEnemyArray()
+        player_pos: tuple[float, float] = Player.GetXY()
+        all_agent_ids: list[int] = AgentArray.GetAllyArray()
+        all_enemies_ids: list[int] = AgentArray.GetEnemyArray()
 
-        agent_ids = AgentArray.Filter.ByCondition(agent_ids, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
-        agent_ids = AgentArray.Filter.ByDistance(agent_ids, player_pos, within_range.value)
+        agent_ids = AgentArray.Filter.ByDistance(all_agent_ids, player_pos, within_range)
+        agent_ids = AgentArray.Filter.ByCondition(agent_ids, lambda agent_id: Agent.IsAlive(agent_id))
         if condition is not None: agent_ids = AgentArray.Filter.ByCondition(agent_ids, condition)
 
         def build_sortable_array(agent_id):
-            agent_pos = GLOBAL_CACHE.Agent.GetXY(agent_id)
+            agent_pos = Agent.GetXY(agent_id)
 
             # scan enemies within range
-            enemies_ids = AgentArray.Filter.ByCondition(all_enemies_ids, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
-            enemies_ids = AgentArray.Filter.ByDistance(enemies_ids, player_pos, within_range.value)
+            enemies_ids = AgentArray.Filter.ByCondition(all_enemies_ids, lambda agent_id: Agent.IsAlive(agent_id))
+            enemies_ids = AgentArray.Filter.ByDistance(enemies_ids, player_pos, within_range)
             enemies_quantity_within_range = 0
 
             if range_to_count_enemies is not None:
                 for enemy_id in enemies_ids:
-                    if Utils.Distance(GLOBAL_CACHE.Agent.GetXY(enemy_id), agent_pos) <= range_to_count_enemies:
+                    if Utils.Distance(Agent.GetXY(enemy_id), agent_pos) <= range_to_count_enemies:
                         enemies_quantity_within_range += 1
 
             # scan agents within aoe range
@@ -491,16 +563,16 @@ class Targets:
 
             if range_to_count_allies is not None:
                 for other_agent_id in agent_ids:
-                    if other_agent_id != agent_id and Utils.Distance(GLOBAL_CACHE.Agent.GetXY(other_agent_id), agent_pos) <= range_to_count_allies:
+                    if other_agent_id != agent_id and Utils.Distance(Agent.GetXY(other_agent_id), agent_pos) <= range_to_count_allies:
                         allies_quantity_within_range += 1
 
             return SortableAgentData(
                 agent_id=agent_id,
                 distance_from_player=Utils.Distance(agent_pos, player_pos),
-                hp=GLOBAL_CACHE.Agent.GetHealth(agent_id),
-                is_caster=GLOBAL_CACHE.Agent.IsCaster(agent_id),
-                is_melee=GLOBAL_CACHE.Agent.IsMelee(agent_id),
-                is_martial=GLOBAL_CACHE.Agent.IsMartial(agent_id),
+                hp=Agent.GetHealth(agent_id),
+                is_caster=Agent.IsCaster(agent_id),
+                is_melee=Agent.IsMelee(agent_id),
+                is_martial=Agent.IsMartial(agent_id),
                 enemy_quantity_within_range=enemies_quantity_within_range,
                 agent_quantity_within_range=allies_quantity_within_range,
                 energy=Resources.get_energy_percent_in_party(agent_id)
@@ -541,33 +613,51 @@ class Targets:
         return data_to_sort
 
     @staticmethod
-    def get_all_possible_allies_ordered_by_priority(
-            within_range: Range,
-            condition: Callable[[int], bool] | None = None,
-            sort_key: tuple[TargetingOrder, ...] | None = None,
-            range_to_count_enemies: float | None = None,
-            range_to_count_allies: float | None = None) -> tuple[int, ...]:
-
-        data = Targets.get_all_possible_allies_ordered_by_priority_raw(
-            within_range=within_range,
-            condition=condition,
-            sort_key=sort_key,
-            range_to_count_enemies=range_to_count_enemies,
-            range_to_count_allies=range_to_count_allies
-        )
-        return tuple(entry.agent_id for entry in data)
-
-    @staticmethod
     def get_first_or_default_from_allies_ordered_by_priority(
-            within_range: Range,
+            within_range: float,
             condition: Callable[[int], bool] | None = None,
             sort_key: tuple[TargetingOrder, ...] | None = None,
             range_to_count_enemies: float | None = None,
             range_to_count_allies: float | None = None) -> int | None:
 
-        allies = Targets.get_all_possible_allies_ordered_by_priority(within_range=within_range, condition=condition, sort_key=sort_key, range_to_count_enemies=range_to_count_enemies, range_to_count_allies=range_to_count_allies)
+        allies = Targets.get_all_possible_allies_ordered_by_priority_raw(within_range=within_range, condition=condition, sort_key=sort_key, range_to_count_enemies=range_to_count_enemies, range_to_count_allies=range_to_count_allies)
         if len(allies) == 0: return None
-        return allies[0]
+        return allies[0].agent_id
+
+    # enemy 
+
+    @staticmethod
+    def get_nearest_or_default_from_enemy_ordered_by_priority_custom_source(
+            source_agent_pos: tuple[float, float],
+            within_range: float,
+            should_prioritize_party_target:bool,
+            condition: Optional[Callable[[int], bool]] = None) -> Optional[int]:
+        
+        enemies = Targets._get_all_possible_enemies_ordered_by_priority_raw(
+            source_agent_pos=source_agent_pos, 
+            within_range=within_range,
+            should_prioritize_party_target=should_prioritize_party_target,
+            condition=condition,
+            sort_key=(TargetingOrder.DISTANCE_ASC, TargetingOrder.HP_ASC))
+            
+        if len(enemies) == 0: return None
+        return enemies[0].agent_id
+
+    @staticmethod
+    def get_nearest_or_default_from_enemy_ordered_by_priority(
+            within_range: float,
+            should_prioritize_party_target:bool,
+            condition: Optional[Callable[[int], bool]] = None) -> Optional[int]:
+    
+        enemies = Targets._get_all_possible_enemies_ordered_by_priority_raw(
+            source_agent_pos=Player.GetXY(), 
+            within_range=within_range,
+            should_prioritize_party_target=should_prioritize_party_target,
+            condition=condition,
+            sort_key=(TargetingOrder.DISTANCE_ASC, TargetingOrder.HP_ASC))
+
+        if len(enemies) == 0: return None
+        return enemies[0].agent_id
 
     @staticmethod
     def get_first_or_default_from_enemy_ordered_by_priority(
@@ -597,40 +687,48 @@ class Targets:
         return enemies[0]
 
     @staticmethod
-    def get_all_possible_enemies_ordered_by_priority_raw(
-            within_range: Range,
+    def _get_all_possible_enemies_ordered_by_priority_raw(
+            source_agent_pos: tuple[float, float],
+            within_range: float,
             condition: Callable[[int], bool] | None = None,
             sort_key: tuple[TargetingOrder, ...] | None = None,
-            range_to_count_enemies: float | None = None) -> list[SortableAgentData]:
+            range_to_count_enemies: float | None = None,
+            should_prioritize_party_target:bool = True) -> list[SortableAgentData]:
+        
+        party_leader_id : int = MemoryCacheManager.get_or_set(MemoryCacheManager.PARTY_LEADER_ID, lambda: CustomBehaviorHelperParty.get_party_leader_id())
+        
+        agentDatas : list[SortableAgentData] = CustomTargeting().get_combined_enemy_targets(
+            source_pos=source_agent_pos,
+            within_range=within_range,
+            leader_agent_id=party_leader_id,
+            include_aggressive_further=True,
+            is_alive=True
+        )
 
-        player_pos: tuple[float, float] = GLOBAL_CACHE.Player.GetXY()
-        agent_ids: list[int] = GLOBAL_CACHE.AgentArray.GetEnemyArray()
-        agent_ids = AgentArray.Filter.ByCondition(agent_ids, lambda agent_id: GLOBAL_CACHE.Agent.IsAlive(agent_id))
-        agent_ids = AgentArray.Filter.ByDistance(agent_ids, player_pos, within_range.value)
-        if condition is not None: agent_ids = AgentArray.Filter.ByCondition(agent_ids, condition)
+        if condition is not None: agentDatas = [agent for agent in agentDatas if condition(agent.agent_id)]
 
-        def build_sortable_array(agent_id):
-            agent_pos = GLOBAL_CACHE.Agent.GetXY(agent_id)
+        def build_sortable_array(agentData: SortableAgentData):
+            agent_pos = Agent.GetXY(agentData.agent_id)
             enemy_quantity_within_range = 0
 
             if range_to_count_enemies is not None:
-                for other_agent_id in agent_ids:  # complexity O(n^2) !
-                    if other_agent_id != agent_id and Utils.Distance(GLOBAL_CACHE.Agent.GetXY(other_agent_id), agent_pos) <= range_to_count_enemies:
+                for other_agent_data in agentDatas:  # complexity O(n^2) !
+                    if other_agent_data.agent_id != agentData.agent_id and Utils.Distance(Agent.GetXY(other_agent_data.agent_id), agent_pos) <= range_to_count_enemies:
                         enemy_quantity_within_range += 1
 
             return SortableAgentData(
-                agent_id=agent_id,
-                distance_from_player=Utils.Distance(agent_pos, player_pos),
-                hp=GLOBAL_CACHE.Agent.GetHealth(agent_id),
-                is_caster=GLOBAL_CACHE.Agent.IsCaster(agent_id),
-                is_melee=GLOBAL_CACHE.Agent.IsMelee(agent_id),
-                is_martial=GLOBAL_CACHE.Agent.IsMartial(agent_id),
+                agent_id=agentData.agent_id,
+                distance_from_player=agentData.distance_from_player,
+                hp=agentData.hp,
+                is_caster=agentData.is_caster,
+                is_melee=agentData.is_melee,
+                is_martial=agentData.is_martial,
                 enemy_quantity_within_range=enemy_quantity_within_range,
                 agent_quantity_within_range=0,  # Not used for enemies
                 energy=0.0  # Not used for enemies
             )
 
-        data_to_sort = list(map(lambda agent_id: build_sortable_array(agent_id), agent_ids))
+        data_to_sort = list(map(lambda agentData: build_sortable_array(agentData), agentDatas))
 
         if not sort_key:  # If no sort_key is provided
             return data_to_sort
@@ -656,7 +754,32 @@ class Targets:
             else:
                 raise ValueError(f"Invalid sorting criterion: {criterion}")
 
+        if should_prioritize_party_target:
+            party_forced_target_agent_id: int | None = CustomBehaviorHelperParty.get_party_custom_target()
+
+            # Final sort: move party forced target to the front if it exists in the array
+            if party_forced_target_agent_id is not None:
+                forced_target_index = next((i for i, x in enumerate(data_to_sort) if x.agent_id == party_forced_target_agent_id), None)
+                if forced_target_index is not None:
+                    forced_target = data_to_sort.pop(forced_target_index)
+                    data_to_sort.insert(0, forced_target)
+
         return data_to_sort
+
+    @staticmethod
+    def get_all_possible_enemies_ordered_by_priority_raw(
+            within_range: Range,
+            condition: Callable[[int], bool] | None = None,
+            sort_key: tuple[TargetingOrder, ...] | None = None,
+            range_to_count_enemies: float | None = None) -> list[SortableAgentData]:
+
+        return Targets._get_all_possible_enemies_ordered_by_priority_raw(
+            source_agent_pos=Player.GetXY(),
+            within_range=within_range.value,
+            condition=condition,
+            sort_key=sort_key,
+            range_to_count_enemies=range_to_count_enemies
+        )
 
     @staticmethod
     def get_all_possible_enemies_ordered_by_priority(
@@ -691,11 +814,11 @@ class Targets:
 class Heals:
 
     @staticmethod
-    def is_party_damaged(within_range:Range, min_allies_count:int, less_health_than_percent:float) -> bool:
+    def is_party_damaged(within_range:float, min_allies_count:int, less_health_than_percent:float) -> bool:
 
-        allies = Targets.get_all_possible_allies_ordered_by_priority(
+        allies = Targets.get_all_possible_allies_ordered_by_priority_raw(
             within_range=within_range,
-            condition= lambda agent_id: GLOBAL_CACHE.Agent.GetHealth(agent_id) < less_health_than_percent,
+            condition= lambda agent_id: Agent.GetHealth(agent_id) < less_health_than_percent,
             sort_key= (TargetingOrder.HP_ASC, TargetingOrder.DISTANCE_ASC),
             range_to_count_enemies=None,
             range_to_count_allies=None)
@@ -704,20 +827,32 @@ class Heals:
         return True
 
     @staticmethod
-    def get_first_member_damaged(within_range: Range, less_health_than_percent: float, exclude_player:bool, condition: Optional[Callable[[int], bool]] = None) -> int | None:
-
-        allies = Targets.get_all_possible_allies_ordered_by_priority(
+    def party_average_health(within_range:float) -> float:
+        allies : list[SortableAgentData] = Targets.get_all_possible_allies_ordered_by_priority_raw(
             within_range=within_range,
-            condition=lambda agent_id: GLOBAL_CACHE.Agent.GetHealth(agent_id) < less_health_than_percent,
+            condition= lambda agent_id: True,
+            sort_key= (TargetingOrder.HP_ASC, TargetingOrder.DISTANCE_ASC),
+        )
+        return reduce(lambda acc, ally: acc + Agent.GetHealth(ally.agent_id), allies, 0) / len(allies)
+
+    @staticmethod
+    def get_first_member_damaged(within_range: float, less_health_than_percent: float, exclude_player:bool, condition: Optional[Callable[[int], bool]] = None) -> int | None:
+
+        allies = Targets.get_all_possible_allies_ordered_by_priority_raw(
+            within_range=within_range,
+            condition=lambda agent_id: Agent.GetHealth(agent_id) < less_health_than_percent,
             sort_key=(TargetingOrder.HP_ASC, TargetingOrder.DISTANCE_ASC),
             range_to_count_enemies=None,
             range_to_count_allies=None)
 
         if exclude_player:
-            allies = AgentArray.Filter.ByCondition(allies, lambda agent_id: agent_id != GLOBAL_CACHE.Player.GetAgentID())
+            allies = AgentArray.Filter.ByCondition(allies, lambda agent_id: agent_id != Player.GetAgentID())
 
         if condition is not None:
             allies = AgentArray.Filter.ByCondition(allies, condition)
 
         if len(allies) == 0: return None
-        return allies[0]
+        return allies[0].agent_id
+    
+
+

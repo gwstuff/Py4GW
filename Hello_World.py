@@ -1,26 +1,41 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range, AutoPathing, Py4GW, FSM, ConsoleLog, Color, DXOverlay
-from typing import List, Tuple, Any, Generator, Callable
 import PyImGui
+import PyAgent
+
+counter = 0
+
+"""def update():
+    global counter
+    counter += 1
 
 
-
-
-selected_step = 0
-
-#dialog = 0x0000008A #get bow
-dialog = 0x63E #enter quest
+def draw():
+    global counter
+    if PyImGui.begin("hello world"):
+        PyImGui.text("Hello World from Python!")
+        PyImGui.text(f"Counter: {counter}")
+    PyImGui.end()"""
+    
+agent_id = 0
+agent_enc_name = []
 def main():
-    global selected_step
+    global agent_id, agent_enc_name
+    if PyImGui.begin("Hello World"):    
+        agent_id = PyImGui.input_int("Agent ID", agent_id)
+        if PyImGui.button("Get Agent Name"):
+            agent_enc_name = PyAgent.PyAgent.GetAgentEncName(agent_id)   
 
-    if PyImGui.begin("PathPlanner Test", PyImGui.WindowFlags.AlwaysAutoResize):
-        
-        if PyImGui.button("interact"):
-            GLOBAL_CACHE.Player.SendDialog(dialog)
+        for byte in agent_enc_name:
+            PyImGui.text(f"{byte} ")
+            PyImGui.same_line(0,-1)
+            
+        PyImGui.new_line()
+        PyImGui.separator()
+        for byte in agent_enc_name:
+            PyImGui.text(f"{chr(byte)} ")
+            PyImGui.same_line(0,-1)
             
 
     PyImGui.end()
-
 
 if __name__ == "__main__":
     main()

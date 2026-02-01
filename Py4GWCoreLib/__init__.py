@@ -6,11 +6,38 @@ from time import sleep
 import inspect
 import sys
 from dataclasses import dataclass, field
+import os
+import subprocess
+
+#*******************************************************************************
+#********* Start of manual import of external libraries  ***********************
+#*******************************************************************************
+def find_system_python():
+    try:
+        python_path = subprocess.check_output("where python", shell=True).decode().split("\n")[0].strip()
+        if python_path and os.path.exists(python_path):
+            return os.path.dirname(python_path)
+    except Exception:
+        pass
+    return sys.prefix if sys.prefix and os.path.exists(sys.prefix) else None
+
+system_python_path = find_system_python()
+if system_python_path:
+    site_packages_path = os.path.join(system_python_path, "Lib", "site-packages")
+    if site_packages_path not in sys.path:
+        sys.path.append(site_packages_path)
+    os.environ["PATH"] = site_packages_path + os.pathsep + os.environ["PATH"]
+
+
+#*******************************************************************************
+#********* End of manual import of external libraries  ***********************
+#*******************************************************************************
+
 
 import Py4GW
+import PyScanner
 import PyImGui
-import PyMap
-import PyMissionMap
+
 import PyAgent
 import PyPlayer
 import PyParty
@@ -27,9 +54,10 @@ import PyPathing
 import PyUIManager
 import PyCamera
 import Py2DRenderer
+import PyCombatEvents
 
 from .enums import *
-from .IconsFontAwesome5 import *
+from .ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 from .Map import *
 from .ImGui import *
 from .model_data import *
@@ -46,6 +74,7 @@ from .Effect import *
 from .Merchant import *
 from .Quest import *
 from .Camera import *
+from .Scanner import *
 
 from .Py4GWcorelib import *
 from .Overlay import *
@@ -55,7 +84,11 @@ from .Routines import *
 from .SkillManager import *
 from .GlobalCache import GLOBAL_CACHE
 from .Pathing import AutoPathing
+from .BuildMgr import BuildMgr
 from .Botting import BottingClass as Botting
+from .Context import GWContext
+from .CombatEvents import CombatEvents
+from .IniManager import IniManager
 
 traceback = traceback
 math = math
@@ -67,9 +100,10 @@ dataclass = dataclass
 field = field
 
 Py4Gw = Py4GW
+Py4GW = Py4GW
+PyScanner = PyScanner
 PyImGui = PyImGui
-PyMap = PyMap
-PyMissionMap = PyMissionMap
+
 PyAgent = PyAgent
 PyPlayer = PyPlayer
 PyParty = PyParty
@@ -82,12 +116,14 @@ PyEffects = PyEffects
 PyPathing = PyPathing
 PyOverlay = PyOverlay
 PyQuest = PyQuest
-PyPathing = PyPathing
 PyUIManager = PyUIManager
 PyCamera = PyCamera
 Py2DRenderer = Py2DRenderer
+PyCombatEvents = PyCombatEvents
 GLOBAL_CACHE = GLOBAL_CACHE
 AutoPathing = AutoPathing
+IconsFontAwesome5 = IconsFontAwesome5
+IniManager = IniManager
 
 
 

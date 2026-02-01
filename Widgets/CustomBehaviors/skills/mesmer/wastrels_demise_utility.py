@@ -1,7 +1,8 @@
 from typing import List, Any, Generator, Callable, override
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range
+from Py4GWCoreLib import GLOBAL_CACHE, Agent, Range
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
+from Widgets.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
 from Widgets.CustomBehaviors.primitives.helpers.targeting_order import TargetingOrder
@@ -12,16 +13,18 @@ from Widgets.CustomBehaviors.primitives.skills.custom_skill_utility_base import 
 
 
 class WastrelsDemiseUtility(CustomSkillUtilityBase):
-    def __init__(self, 
-        current_build: list[CustomSkill], 
+    def __init__(self,
+        event_bus: EventBus,
+        current_build: list[CustomSkill],
         mana_required_to_cast: int = 0,
         score_definition: ScorePerAgentQuantityDefinition = ScorePerAgentQuantityDefinition(lambda enemy_qte: 70 if enemy_qte >= 3 else 40 if enemy_qte <= 2 else 0),
         allowed_states: list[BehaviorState] = [BehaviorState.IN_AGGRO]
         ) -> None:
 
         super().__init__(
-            skill=CustomSkill("Wastrels_Demise"), 
-            in_game_build=current_build, 
+            event_bus=event_bus,
+            skill=CustomSkill("Wastrels_Demise"),
+            in_game_build=current_build,
             mana_required_to_cast=mana_required_to_cast,
             score_definition=score_definition,
             allowed_states=allowed_states)
@@ -32,7 +35,7 @@ class WastrelsDemiseUtility(CustomSkillUtilityBase):
         
         targets = custom_behavior_helpers.Targets.get_all_possible_enemies_ordered_by_priority_raw(
                     within_range=Range.Spellcast,
-                    condition=lambda agent_id: not GLOBAL_CACHE.Agent.IsHexed(agent_id),
+                    condition=lambda agent_id: not Agent.IsHexed(agent_id),
                     sort_key=(TargetingOrder.AGENT_QUANTITY_WITHIN_RANGE_DESC, TargetingOrder.HP_DESC),
                     range_to_count_enemies=GLOBAL_CACHE.Skill.Data.GetAoERange(self.custom_skill.skill_id))
         return targets

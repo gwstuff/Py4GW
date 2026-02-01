@@ -1,7 +1,6 @@
 from Py4GWCoreLib import PyImGui, GLOBAL_CACHE, IniHandler, Timer, ThrottledTimer
 from HeroAI.cache_data import CacheData
 from HeroAI.constants import MAX_NUM_PLAYERS
-from Widgets.HeroAI import TabType
 
 import os
 import sys
@@ -80,11 +79,21 @@ win_x = ini_window.read_int(WINDOW_SECTION, "x", 100)
 win_y = ini_window.read_int(WINDOW_SECTION, "y", 100)
 win_collapsed = ini_window.read_bool(WINDOW_SECTION, "collapsed", False)
 first_run_window = True
+slot_number = 0
 
 # ─── Frame‐by‐frame UI logic ────────────────────────────────────────────
 def on_imgui_render(me: int):
     global _running, _last_flag, _consumed
-    global first_run_window, win_x, win_y, win_collapsed
+    global first_run_window, win_x, win_y, win_collapsed, slot_number
+
+    # Show the widget only if HR is equipped
+    heroic_refrain_skill_id = GLOBAL_CACHE.Skill.GetID("Heroic_Refrain")
+    try:
+        slot_number = GLOBAL_CACHE.SkillBar.GetSlotBySkillID(heroic_refrain_skill_id)
+    except IndexError:
+        pass
+    if not slot_number:
+        return
 
     # Restore window position & collapsed state on first run
     if first_run_window:
@@ -132,7 +141,7 @@ def cast_heroic_refrain():
     heroic_refrain_skill_id = GLOBAL_CACHE.Skill.GetID("Heroic_Refrain")
     
     # check if player is in explorable area
-    if not GLOBAL_CACHE.Map.IsExplorable():
+    if not Map.IsExplorable():
         PyImGui.text("Enter explorable area")
         return
     

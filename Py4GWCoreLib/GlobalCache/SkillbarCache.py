@@ -15,6 +15,9 @@ class SkillbarCache:
     def LoadHeroSkillTemplate (self, hero_index, skill_template):
         self._action_queue_manager.AddAction("ACTION", self._skillbar_instance.LoadHeroSkillTemplate, hero_index, skill_template)
         
+    def GetSkillBySlot(self, slot):
+        return self._skillbar_instance.GetSkill(slot)
+    
     def GetSkillIDBySlot(self, slot):
         return self._skillbar_instance.GetSkill(slot).id.id
     
@@ -25,6 +28,13 @@ class SkillbarCache:
             if skill_id != 0:
                 skill_ids.append(skill_id)
                 
+        return skill_ids
+    
+    def GetZeroFilledSkillbar(self):
+        skill_ids = {}
+        for slot in range(1, 9):  # Loop through skill slots 1 to 8
+            skill_ids[slot] = self.GetSkillIDBySlot(slot)
+
         return skill_ids
     
     def GetHeroSkillbar(self, hero_index):

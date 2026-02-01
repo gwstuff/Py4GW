@@ -6,14 +6,14 @@ from Py4GWCoreLib import ImGui
 from Py4GWCoreLib import Overlay
 from Py4GWCoreLib import DXOverlay
 from Py4GWCoreLib import ThrottledTimer
-from Py4GWCoreLib import PyMissionMap
 from Py4GWCoreLib import Timer
 from Py4GWCoreLib import Utils
-from Py4GWCoreLib import RawAgentArray
 from Py4GWCoreLib import Range
 from Py4GWCoreLib import Rarity
 from Py4GWCoreLib import Routines
-from Py4GWCoreLib import Map
+from Py4GWCoreLib import Map, Player
+from Py4GWCoreLib import Agent, AgentArray
+from Py4GWCoreLib.native_src.context.AgentContext import AgentStruct
 
 from typing import Union
 import math
@@ -141,17 +141,17 @@ def FloatingSlider(caption, value,x,y,min_value, max_value, color:Color):
     PyImGui.pop_style_color(1)
     return result
 
-def RawGamePosToScreen(x:float, y:float, zoom:float, zoom_offset:float, left_bound:float, top_bound:float, boundaries:list[float],
+def RawGamePosToScreen(x:float, y:float, zoom:float, zoom_offset:float, left_bound:float, top_bound:float, boundaries:tuple[float, float, float, float],
                        pan_offset_x:float, pan_offset_y:float, scale_x:float, scale_y:float,
                        mission_map_screen_center_x:float, mission_map_screen_center_y:float) -> tuple[float, float]:
 
     global GWINCHES
 
-    if len(boundaries) < 5:
+    if len(boundaries) < 4:
         return 0.0, 0.0  # fail-safe
 
-    min_x = boundaries[1]
-    max_y = boundaries[4]
+    min_x = boundaries[0]
+    max_y = boundaries[3]
 
     # Step 3: Compute origin on the world map based on boundary distances
     origin_x = left_bound + abs(min_x) / GWINCHES
@@ -175,17 +175,17 @@ def RawGamePosToScreen(x:float, y:float, zoom:float, zoom_offset:float, left_bou
     return screen_x, screen_y
 
 def RawScreenToRawGamePos(screen_x: float, screen_y: float, zoom: float, zoom_offset: float,
-                       left_bound: float, top_bound: float, boundaries: list[float],
+                       left_bound: float, top_bound: float, boundaries: tuple[float, float, float, float],
                        pan_offset_x: float, pan_offset_y: float,
                        scale_x: float, scale_y: float,
                        mission_map_screen_center_x: float, mission_map_screen_center_y: float) -> tuple[float, float]:
     global GWINCHES
 
-    if len(boundaries) < 5:
+    if len(boundaries) < 4:
         return 0.0, 0.0  # fail-safe
 
-    min_x = boundaries[1]
-    max_y = boundaries[4]
+    min_x = boundaries[0]
+    max_y = boundaries[3]
 
     # Compute origin same as before
     origin_x = left_bound + abs(min_x) / GWINCHES
@@ -650,7 +650,6 @@ GLOBAL_CONFIGS.add(object_item)
 #region MISSIONMAP
 class MissionMap:
     def __init__(self):
-        self.mission_map_instance = PyMissionMap.PyMissionMap()
         self.left = 0
         self.top = 0
         self.right = 0
@@ -667,7 +666,7 @@ class MissionMap:
         self.last_click_x = 0
         self.last_click_y = 0
         
-        self.boundaries = []
+        self.boundaries:tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
         self.geometry = []
         self.renderer = DXOverlay()
         self.mega_zoom_renderer = DXOverlay()
@@ -681,7 +680,6 @@ class MissionMap:
         self.mission_map_screen_center_x, self.mission_map_screen_center_y = 0.0, 0.0
         
         self.throttle_timer = ThrottledTimer(34) # every 4 frames 1000/60 = 16.67ms * 4 = 66.67ms
-        self.raw_agent_array_handler = None
         self.agent_array = []
         self.Map_load_timer = Timer()
         self.Map_load_timer.Start()
@@ -714,35 +712,34 @@ class MissionMap:
                    
 
     def update(self):  
-        if self.raw_agent_array_handler is None:
-            self.raw_agent_array_handler = RawAgentArray() 
-        self.raw_agent_array_handler.update()
-        self.agent_array = self.raw_agent_array_handler.get_array()
+
         if not self.throttle_timer.IsExpired():
             return
         self.throttle_timer.Reset()    
-        self.mission_map_instance.GetContext()
-        if not self.geometry:
-            self.boundaries = Map.map_instance().map_boundaries
-            self.left_bound, self.top_bound, self.right_bound, self.bottom_bound = Map.GetMapWorldMapBounds()
+
+        
+        self.boundaries = Map.GetMapBoundaries()
+        self.left_bound, self.top_bound, self.right_bound, self.bottom_bound = Map.GetMapWorldMapBounds()
+        
+        #self.geometry = Map.Pathing.GetComputedGeometry()
+        #self.renderer.set_primitives(self.geometry, Color(255, 255, 255, 80).to_dx_color())
+        #self.mega_zoom_renderer.set_primitives(self.geometry, Color(255, 255, 255, 100).to_dx_color())
+        self.renderer.build_pathing_trapezoid_geometry(Color(255, 255, 255, 80).to_dx_color())
+        self.mega_zoom_renderer.build_pathing_trapezoid_geometry(Color(255, 255, 255, 100).to_dx_color())
+        
+        self.renderer.mask.set_rectangle_mask(True)
+        self.mega_zoom_renderer.mask.set_rectangle_mask(True)
             
-            self.geometry = Map.Pathing.GetComputedGeometry()
-            self.renderer.set_primitives(self.geometry, Color(255, 255, 255, 80).to_dx_color())
-            self.mega_zoom_renderer.set_primitives(self.geometry, Color(255, 255, 255, 100).to_dx_color())
-            
-            self.renderer.mask.set_rectangle_mask(True)
-            self.mega_zoom_renderer.mask.set_rectangle_mask(True)
-            
-        coords = mission_map.mission_map_instance.left, mission_map.mission_map_instance.top, mission_map.mission_map_instance.right, mission_map.mission_map_instance.bottom
+        coords = Map.MissionMap.GetMissionMapContentsCoords()
         self.left, self.top, self.right, self.bottom = int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3])
         self.width = self.right - self.left
         self.height = self.bottom - self.top
         
-        self.pan_offset_x, self.pan_offset_y = mission_map.mission_map_instance.pan_offset_x, mission_map.mission_map_instance.pan_offset_y
-        self.scale_x, self.scale_y = mission_map.mission_map_instance.scale_x, mission_map.mission_map_instance.scale_y
+        self.pan_offset_x, self.pan_offset_y = Map.MissionMap.GetPanOffset()
+        self.scale_x, self.scale_y = Map.MissionMap.GetScale()
 
-        self.zoom = mission_map.mission_map_instance.zoom
-        self.mission_map_screen_center_x, self.mission_map_screen_center_y = mission_map.mission_map_instance.mission_map_screen_center_x, mission_map.mission_map_instance.mission_map_screen_center_y
+        self.zoom = Map.MissionMap.GetZoom()
+        self.mission_map_screen_center_x, self.mission_map_screen_center_y = Map.MissionMap.GetCenter()
         
         self.left_world, self.top_world = RawScreenToRawGamePos(self.left, self.top, 
                                                                 self.zoom, self.mega_zoom,
@@ -755,11 +752,11 @@ class MissionMap:
                                                                 self.mission_map_screen_center_x, self.mission_map_screen_center_y)
 
         
-        self.player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
-        self.player_target_id = GLOBAL_CACHE.Player.GetTargetID()
-        player_object = self.raw_agent_array_handler.get_agent(self.player_agent_id)   
+        self.player_agent_id = Player.GetAgentID()
+        self.player_target_id = Player.GetTargetID()
         
-        self.player_x, self.player_y = player_object.x, player_object.y
+        
+        self.player_x, self.player_y = Player.GetXY()
         self.player_screen_x, self.player_screen_y = RawGamePosToScreen(self.player_x, self.player_y, 
                                                     self.zoom, self.mega_zoom,
                                                     self.left_bound, self.top_bound, self.boundaries,
@@ -802,6 +799,7 @@ class MissionMap:
         self.renderer.world_space.set_zoom(zoom/100.0)
         self.mega_zoom_renderer.world_space.set_zoom(zoom/100.0)
         self.renderer.world_space.set_scale(self.scale_x)
+        self.mega_zoom_renderer.world_space.set_scale(self.scale_x)
         
         
         
@@ -813,8 +811,8 @@ mission_map = MissionMap()
 #region DRAWING
 def DrawFrame():
     global mission_map
-    def _get_agent_xy(agent):
-        x,y = RawGamePosToScreen(agent.x, agent.y, 
+    def _get_agent_xy(agent_id:int):
+        x,y = RawGamePosToScreen(*Agent.GetXY(agent_id), 
                                  mission_map.zoom, mission_map.mega_zoom,
                                  mission_map.left_bound, mission_map.top_bound,
                                  mission_map.boundaries, 
@@ -857,74 +855,76 @@ def DrawFrame():
     _draw_compass_range(zoom)
     
       
-    neutral_array = mission_map.raw_agent_array_handler.get_neutral_array() if mission_map.raw_agent_array_handler is not None else []
-    minion_array = mission_map.raw_agent_array_handler.get_minion_array() if mission_map.raw_agent_array_handler is not None else []
-    spirit_pet_array = mission_map.raw_agent_array_handler.get_spirit_pet_array() if mission_map.raw_agent_array_handler is not None else []
-    enemy_array = mission_map.raw_agent_array_handler.get_enemy_array() if mission_map.raw_agent_array_handler is not None else []
-    ally_array = mission_map.raw_agent_array_handler.get_ally_array() if mission_map.raw_agent_array_handler is not None else []
-    npc_minipet_array = mission_map.raw_agent_array_handler.get_npc_minipet_array() if mission_map.raw_agent_array_handler is not None else []
-    for agent in neutral_array:
-        x,y = _get_agent_xy(agent)
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
+    neutral_array = AgentArray.GetNeutralArray()
+    minion_array = AgentArray.GetMinionArray()
+    spirit_pet_array = AgentArray.GetSpiritPetArray()
+    enemy_array = AgentArray.GetEnemyArray()
+    ally_array = AgentArray.GetAllyArray()
+    npc_minipet_array = AgentArray.GetNPCMinipetArray()
+    for agent_id in neutral_array:
+        x,y = _get_agent_xy(agent_id)
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
             marker = mission_map.neutral_marker
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
 
-    for agent in minion_array:
-        x,y = _get_agent_xy(agent)
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
+    for agent_id in minion_array:
+        x,y = _get_agent_xy(agent_id)
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
             marker = mission_map.minion_marker
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()  
             
-    for agent in spirit_pet_array:
-        x,y = _get_agent_xy(agent)
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
-            if not agent.living_agent.is_spawned:
+    for agent_id in spirit_pet_array:
+        x,y = _get_agent_xy(agent_id)
+
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
+            if not Agent.IsSpawned(agent_id):
                marker = mission_map.pet_marker
             else:
-                model_id = agent.living_agent.player_number
+                model_id = Agent.GetPlayerNumber(agent_id)
                 spirit_name = get_spirit_name(model_id)
                 if spirit_name == "Unknown":
                     marker = mission_map.neutral_marker
                 else:
                     marker = GLOBAL_CONFIGS.get(spirit_name)
                     area = Range.Spirit.value
-                    if agent.living_agent.player_number in AREA_SPIRIT_MODELS:
+                    if Agent.GetPlayerNumber(agent_id) in AREA_SPIRIT_MODELS:
                         area = Range.Area.value
-                    if agent.living_agent.player_number in EARSHOT_SPIRIT_MODELS:
+                    if Agent.GetPlayerNumber(agent_id) in EARSHOT_SPIRIT_MODELS:
                         area = Range.Earshot.value
                     spirit_area = RawGwinchToPixels(area,mission_map.zoom, mission_map.mega_zoom, mission_map.scale_x)
                 
                     Overlay().DrawPoly      (x, y, radius=spirit_area-2, color=marker.AlternateColor.to_color(),numsegments=32,thickness=1.0)
                     Overlay().DrawPolyFilled(x, y, radius=spirit_area, color=marker.AlternateColor.to_color(),numsegments=32)
                     
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
         
-    for agent in enemy_array:
-        x,y = _get_agent_xy(agent)
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
-            if not agent.living_agent.is_spawned:
-                if agent.living_agent.player_number in PET_MODEL_IDS:
+    for agent_id in enemy_array:
+        x,y = _get_agent_xy(agent_id)
+
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
+            if not Agent.IsSpawned(agent_id):
+                if Agent.GetPlayerNumber(agent_id) in PET_MODEL_IDS:
                         marker = mission_map.enemy_pet_marker
                 else:
                     marker = mission_map.enemy_marker
             else:
-                model_id = agent.living_agent.player_number
+                model_id = Agent.GetPlayerNumber(agent_id)
                 spirit_name = get_spirit_name(model_id)
                 if spirit_name == "Unknown":
                     marker = mission_map.enemy_marker
                 else:
                     marker = GLOBAL_CONFIGS.get(spirit_name)
                     area = Range.Spirit.value
-                    if agent.living_agent.player_number in AREA_SPIRIT_MODELS:
+                    if Agent.GetPlayerNumber(agent_id) in AREA_SPIRIT_MODELS:
                         area = Range.Area.value
-                    if agent.living_agent.player_number in EARSHOT_SPIRIT_MODELS:
+                    if Agent.GetPlayerNumber(agent_id) in EARSHOT_SPIRIT_MODELS:
                         area = Range.Earshot.value
                         
                     enemy_marker = mission_map.enemy_marker
@@ -936,73 +936,73 @@ def DrawFrame():
                     Overlay().DrawPoly      (x, y, radius=spirit_area-2, color=shifted_color.to_color(),numsegments=32,thickness=1.0)
                     Overlay().DrawPolyFilled(x, y, radius=spirit_area, color=shifted_color.to_color(),numsegments=32)
                     
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
         
       
-    player_agent = None  
-    for agent in ally_array:
-        if player_agent is None:
-            if agent.id == mission_map.player_agent_id:
-                player_agent = agent
-                continue
-            
-        x,y = _get_agent_xy(agent)
 
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
-            if agent.living_agent.is_npc:
+    for agent_id in ally_array:
+
+            
+        x,y = _get_agent_xy(agent_id)
+
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
+            if Agent.IsNPC(agent_id):
                     marker = mission_map.npc_marker
             else:
                     marker = mission_map.players_marker  
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw() 
      
-    if player_agent is not None:
-        x,y = _get_agent_xy(player_agent)
-        if player_agent.is_living and player_agent.living_agent.is_alive:
-            rotation_angle = player_agent.rotation_angle
+    if Player.IsPlayerLoaded():
+        agent_id = Player.GetAgentID()
+        x,y = _get_agent_xy(agent_id)
+
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
             marker = mission_map.player_marker
-            alternate_color, size = _get_alternate_color(player_agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
      
      
         
-    for agent in npc_minipet_array:
-        x,y = _get_agent_xy(agent)
-        if agent.is_living and agent.living_agent.is_alive:
-            rotation_angle = agent.rotation_angle
-            level = agent.living_agent.level
+    for agent_id in npc_minipet_array:
+        x,y = _get_agent_xy(agent_id)
+
+        if Agent.IsLiving(agent_id) and Agent.IsAlive(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
+            level = Agent.GetLevel(agent_id)
             if level > 1:
-                #agent_name = mission_map.raw_agent_array_handler.get_name(agent.id)  if mission_map.raw_agent_array_handler is not None else ""
-                agent_name = GLOBAL_CACHE.Agent.GetName(agent.id)
+                agent_name = Agent.GetNameByID(agent_id)
                 if "MERCHANT" in agent_name.upper():
                     marker = mission_map.merchant_marker
                 else:
                     marker = mission_map.npc_marker   
             else: 
                 marker = mission_map.minipet_marker     
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
         
-    for agent in mission_map.raw_agent_array_handler.get_gadget_array() if mission_map.raw_agent_array_handler is not None else []:
-        x,y = _get_agent_xy(agent)
-        if agent.is_gadget:
-            rotation_angle = agent.rotation_angle
-            gadget_id = GLOBAL_CACHE.Agent.GetGadgetID(agent.id)
+    for agent_id in AgentArray.GetGadgetArray():
+        x,y = _get_agent_xy(agent_id)
+        if Agent.IsGadget(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
+            gadget_id = Agent.GetGadgetID(agent_id)
             if gadget_id in CHEST_GADGET_IDS:
                 marker = mission_map.chest_marker
             else:
                 marker = mission_map.gadget_marker
                 
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
-    for agent in mission_map.raw_agent_array_handler.get_item_array() if mission_map.raw_agent_array_handler is not None else []:
-        x,y = _get_agent_xy(agent)
-        if agent.is_item:
-            rotation_angle = agent.rotation_angle
+    for agent_id in AgentArray.GetItemArray():
+        x,y = _get_agent_xy(agent_id)
+        if Agent.IsItem(agent_id):
+            rotation_angle = Agent.GetRotationAngle(agent_id)
             marker = mission_map.item_marker
-            item_id = agent.item_agent.item_id
+            
+            item_id = Agent.GetItemAgentItemID(agent_id)
             item = GLOBAL_CACHE.Item.raw_item_array.get_item_by_id(item_id)
             item_rarity = item.rarity if item is not None else 0
             if item_rarity == Rarity.Blue.value:
@@ -1016,7 +1016,7 @@ def DrawFrame():
             else:
                 marker.Color = mission_map.item_rarity_white_color
             
-            alternate_color, size = _get_alternate_color(agent.id)
+            alternate_color, size = _get_alternate_color(agent_id)
             Marker(marker.Marker, marker.Color, alternate_color, x, y, marker.size + size, offset_angle=rotation_angle).draw()
         
     Overlay().EndDraw()  
@@ -1051,7 +1051,7 @@ def main():
                 Color(255, 255, 255, 255),
                 width=mission_map.width,
                 margin=8,
-                label="Cords"
+                label="Coords"
             )
             if mission_map.zoom >= 3.5:
                     mission_map.mega_zoom = FloatingSlider("Mega Zoom", mission_map.mega_zoom, mission_map.left, mission_map.bottom-27, 0.0, 15.0, Color(255, 255, 255, 255))
@@ -1059,7 +1059,8 @@ def main():
                 mission_map.mega_zoom = 0.0 
     
     except Exception as e:
-        print(f"Error in main: {e}")
+        import Py4GW
+        Py4GW.Console.Log("Mission Map +", str(e), Py4GW.Console.MessageType.Error)
 
         
     

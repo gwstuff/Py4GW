@@ -1,8 +1,8 @@
 from time import sleep
 from typing import List, Tuple, Callable
+from ..Player import Player
 
-
-import importlib, typing
+import importlib
 
 class _RProxy:
     def __getattr__(self, name: str):
@@ -11,44 +11,42 @@ class _RProxy:
 
 Routines = _RProxy()
 
-
-
 #region Sequential
 class Sequential:
     class Player:
         @staticmethod
         def InteractAgent(agent_id:int):
             from ..GlobalCache import GLOBAL_CACHE
-            GLOBAL_CACHE.Player.Interact(agent_id, False)
+            Player.Interact(agent_id, False)
             sleep(0.1)
             
         @staticmethod
         def InteractTarget():
             from ..GlobalCache import GLOBAL_CACHE
-            target_id = GLOBAL_CACHE.Player.GetTargetID()
+            target_id = Player.GetTargetID()
             if target_id != 0:
                 Sequential.Player.InteractAgent(target_id)
 
         @staticmethod
         def SendDialog(dialog_id:str):
             from ..GlobalCache import GLOBAL_CACHE
-            GLOBAL_CACHE.Player.SendDialog(int(dialog_id, 16))
+            Player.SendDialog(int(dialog_id, 16))
             sleep(0.3)
 
         @staticmethod
         def SetTitle(title_id:int, log=False):
-            from ..GlobalCache import GLOBAL_CACHE
+            from ..Player import Player
             from ..Py4GWcorelib import ConsoleLog, Console
-            GLOBAL_CACHE.Player.SetActiveTitle(title_id)
+            Player.SetActiveTitle(title_id)
             sleep(0.3)   
             if log:
                 ConsoleLog("SetTitle", f"Setting title to {title_id}", Console.MessageType.Info) 
 
         @staticmethod
         def SendChatCommand(command:str, log=False):
-            from ..GlobalCache import GLOBAL_CACHE
+            from ..Player import Player
             from ..Py4GWcorelib import ConsoleLog, Console
-            GLOBAL_CACHE.Player.SendChatCommand(command)
+            Player.SendChatCommand(command)
             sleep(0.3)
             if log:
                 ConsoleLog("SendChatCommand", f"Sending chat command {command}", Console.MessageType.Info)
@@ -57,7 +55,7 @@ class Sequential:
         def Move(x:float, y:float, log=False):
             from ..GlobalCache import GLOBAL_CACHE
             from ..Py4GWcorelib import ConsoleLog, Console
-            GLOBAL_CACHE.Player.Move(x, y)
+            Player.Move(x, y)
             sleep(0.1)
             if log:
                 ConsoleLog("MoveTo", f"Moving to {x}, {y}", Console.MessageType.Info)
@@ -75,7 +73,7 @@ class Sequential:
                 if not Checks.Map.MapValid():
                     return []
                     
-                GLOBAL_CACHE.Player.Move(target_x, target_y)
+                Player.Move(target_x, target_y)
                     
                 current_x, current_y = Player.GetXY()
                 previous_distance = Utils.Distance((current_x, current_y), (target_x, target_y))
@@ -96,7 +94,7 @@ class Sequential:
                         # Inside reissue logic
                         offset_x = random.uniform(-5, 5)
                         offset_y = random.uniform(-5, 5)
-                        GLOBAL_CACHE.Player.Move(target_x + offset_x, target_y + offset_y)
+                        Player.Move(target_x + offset_x, target_y + offset_y)
                     previous_distance = current_distance                    
                     
                     # Check if arrived
@@ -126,9 +124,10 @@ class Sequential:
             from ..GlobalCache import GLOBAL_CACHE
             from ..Py4GWcorelib import ConsoleLog, Console
             from .Checks import Checks
-            if not GLOBAL_CACHE.Map.IsMapReady():
+            from ..Map import Map
+            if not Map.IsMapReady():
                 return False
-            player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+            player_agent_id = Player.GetAgentID()
             enough_energy = Checks.Skills.HasEnoughEnergy(player_agent_id,skill_id)
             skill_ready = Checks.Skills.IsSkillIDReady(skill_id)
             
@@ -145,7 +144,7 @@ class Sequential:
             from ..GlobalCache import GLOBAL_CACHE
             from ..Py4GWcorelib import ConsoleLog, Console
             from .Checks import Checks
-            player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+            player_agent_id = Player.GetAgentID()
             skill_id = GLOBAL_CACHE.SkillBar.GetSkillIDBySlot(slot)
             enough_energy = Checks.Skills.HasEnoughEnergy(player_agent_id,skill_id)
             skill_ready = Checks.Skills.IsSkillSlotReady(slot)
@@ -182,20 +181,21 @@ class Sequential:
             Returns: None
             """
             from ..GlobalCache import GLOBAL_CACHE
+            from ..Map import Map
             from ..Py4GWcorelib import ConsoleLog, Console
-            if GLOBAL_CACHE.Map.GetMapID() != outpost_id:
-                ConsoleLog("TravelToOutpost", f"Travelling to {GLOBAL_CACHE.Map.GetMapName(outpost_id)}", log=log)
-                GLOBAL_CACHE.Map.Travel(outpost_id)
+            if Map.GetMapID() != outpost_id:
+                ConsoleLog("TravelToOutpost", f"Travelling to {Map.GetMapName(outpost_id)}", log=log)
+                Map.Travel(outpost_id)
                 sleep(3)
                 waititng_for_map_load = True
                 while waititng_for_map_load:
-                    if GLOBAL_CACHE.Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded() and GLOBAL_CACHE.Map.GetMapID() == outpost_id:
+                    if Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded() and Map.GetMapID() == outpost_id:
                         waititng_for_map_load = False
                         break
                     sleep(1)
                 sleep(1)
             
-            ConsoleLog("TravelToOutpost", f"Arrived at {GLOBAL_CACHE.Map.GetMapName(outpost_id)}", log=log)
+            ConsoleLog("TravelToOutpost", f"Arrived at {Map.GetMapName(outpost_id)}", log=log)
 
         @staticmethod
         def WaitforMapLoad(map_id, log=False):
@@ -208,27 +208,31 @@ class Sequential:
             """
             from ..GlobalCache import GLOBAL_CACHE
             from ..Py4GWcorelib import ConsoleLog
+            from ..Agent import Agent
+            from ..Map import Map
             waititng_for_map_load = True
             while waititng_for_map_load:
-                if not (GLOBAL_CACHE.Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded() and GLOBAL_CACHE.Map.GetMapID() == map_id):
+                if not (Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded() and Map.GetMapID() == map_id):
                     sleep(1)
                 else:
                     waititng_for_map_load = False
                     break
             
-            ConsoleLog("WaitforMapLoad", f"Arrived at {GLOBAL_CACHE.Map.GetMapName(map_id)}", log=log)
+            ConsoleLog("WaitforMapLoad", f"Arrived at {Map.GetMapName(map_id)}", log=log)
             sleep(1)
             
     class Agents:
         @staticmethod
         def GetAgentIDByName(agent_name):
             from ..GlobalCache import GLOBAL_CACHE
-            agent_ids = GLOBAL_CACHE.AgentArray.GetAgentArray()
+            from ..AgentArray import AgentArray
+            from ..Agent import Agent   
+            agent_ids = AgentArray.GetAgentArray()
             agent_names = {}
 
             # Request all names
             for agent_id in agent_ids:
-                GLOBAL_CACHE.Agent.RequestName(agent_id)
+                Agent.RequestName(agent_id)
 
             # Wait until all names are ready (with timeout safeguard)
             timeout = 2.0  # seconds
@@ -238,7 +242,7 @@ class Sequential:
             while elapsed < timeout:
                 all_ready = True
                 for agent_id in agent_ids:
-                    if not GLOBAL_CACHE.Agent.IsNameReady(agent_id):
+                    if not Agent.IsNameReady(agent_id):
                         all_ready = False
                         break  # no need to check further
 
@@ -250,8 +254,8 @@ class Sequential:
 
             # Populate agent_names dictionary
             for agent_id in agent_ids:
-                if GLOBAL_CACHE.Agent.IsNameReady(agent_id):
-                    agent_names[agent_id] = GLOBAL_CACHE.Agent.GetName(agent_id)
+                if Agent.IsNameReady(agent_id):
+                    agent_names[agent_id] = Agent.GetNameByID(agent_id)
 
             # Partial, case-insensitive match
             search_lower = agent_name.lower()
@@ -271,9 +275,11 @@ class Sequential:
             """
             from ..GlobalCache import GLOBAL_CACHE
             from ..Py4GWcorelib import ConsoleLog, Console
-            agent_ids = GLOBAL_CACHE.AgentArray.GetAgentArray()
+            from ..AgentArray import AgentArray
+            from ..Agent import Agent
+            agent_ids = AgentArray.GetAgentArray()
             for agent_id in agent_ids:
-                if GLOBAL_CACHE.Agent.GetModelID(agent_id) == model_id:
+                if Agent.GetModelID(agent_id) == model_id:
                     return agent_id
             return 0
 
@@ -281,7 +287,7 @@ class Sequential:
         def ChangeTarget(agent_id):
             from ..GlobalCache import GLOBAL_CACHE
             if agent_id != 0:
-                GLOBAL_CACHE.Player.ChangeTarget(agent_id)
+                Player.ChangeTarget(agent_id)
                 sleep(0.25)    
             
         @staticmethod
@@ -328,13 +334,15 @@ class Sequential:
         @staticmethod
         def InteractWithNearestChest():
             """Target and interact with chest and items."""
-            from Py4GWCoreLib import ActionQueueManager
-            from Py4GWCoreLib import LootConfig
+            from ..Py4GWcorelib import ActionQueueManager
+            from ..Py4GWcorelib import LootConfig
+            from ..Py4GWcorelib import Utils
             from ..GlobalCache import GLOBAL_CACHE
-            from ..Py4GWcorelib import Utils, Range
+            from ..enums_src.GameData_enums import Range
             from .Agents import Agents
+            from ..Agent import Agent
             nearest_chest = Agents.GetNearestChest(2500)
-            chest_x, chest_y = GLOBAL_CACHE.Agent.GetXY(nearest_chest)
+            chest_x, chest_y = Agent.GetXY(nearest_chest)
 
 
             Sequential.Movement.FollowPath([(chest_x, chest_y)])
@@ -342,7 +350,7 @@ class Sequential:
         
             Sequential.Player.InteractAgent(nearest_chest)
             sleep(0.5)
-            ActionQueueManager().AddAction("ACTION",GLOBAL_CACHE.Player.SendDialog, 2)
+            ActionQueueManager().AddAction("ACTION",Player.SendDialog, 2)
             sleep(1)
 
             Sequential.Agents.TargetNearestItem(distance=300)
@@ -355,8 +363,9 @@ class Sequential:
         @staticmethod
         def InteractWithAgentByName(agent_name:str):
             from ..GlobalCache import GLOBAL_CACHE
+            from ..Agent import Agent
             Sequential.Agents.TargetAgentByName(agent_name)
-            agent_x, agent_y = GLOBAL_CACHE.Agent.GetXY(GLOBAL_CACHE.Player.GetTargetID())
+            agent_x, agent_y = Agent.GetXY(Player.GetTargetID())
 
             Sequential.Movement.FollowPath([(agent_x, agent_y)])
             sleep(0.5)
@@ -367,8 +376,9 @@ class Sequential:
         @staticmethod
         def InteractWithAgentXY(x:float, y:float):
             from ..GlobalCache import GLOBAL_CACHE
+            from ..Agent import Agent
             Sequential.Agents.TargetNearestNPCXY(x, y, 100)
-            agent_x, agent_y = GLOBAL_CACHE.Agent.GetXY(GLOBAL_CACHE.Player.GetTargetID())
+            agent_x, agent_y = Agent.GetXY(Player.GetTargetID())
 
             Sequential.Movement.FollowPath([(agent_x, agent_y)])
             sleep(1)
@@ -596,7 +606,7 @@ class Sequential:
                     ActionQueueManager().ResetAllQueues()
                     return
                 if Agent.IsValid(item_id):
-                    GLOBAL_CACHE.Player.Interact(item_id, False)
+                    Player.Interact(item_id, False)
                     sleep(1.250)
                 
             if log and len(item_array) > 0:

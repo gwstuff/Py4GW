@@ -309,7 +309,12 @@ pick_up_item_timer = Timer()
 pick_up_item_timer.Start()
 
 def IsValidItem(item_id):
-    return (Agent.agent_instance(item_id).item_agent.owner_id == Player.GetAgentID()) or (Agent.agent_instance(item_id).item_agent.owner_id == 0)
+    item_agent = Agent.GetItemAgentByID(item_id)
+    if item_agent is None:
+        return False
+    
+    owner = item_agent.owner
+    return owner == Player.GetAgentID() or owner == 0
 
 def get_filtered_loot_array():
     global bot_vars
@@ -323,7 +328,7 @@ def get_filtered_loot_array():
     valid_owner_count = len(item_array) # Count after ownership check
 
     agent_to_item_map = {
-        agent_id: Agent.GetItemAgent(agent_id).item_id
+        agent_id: Agent.GetItemAgentItemID(agent_id)
         for agent_id in item_array
     }
 
@@ -346,10 +351,10 @@ def get_filtered_loot_array():
     # === Map piece filtering ===
     if not bot_vars.config_vars.loot_map_pieces:
         map_piece_model_ids = {
-            ModelID.Map_Piece_Tl, # 24629
-            ModelID.Map_Piece_Tr, # 24630
-            ModelID.Map_Piece_Bl, # 24631
-            ModelID.Map_Piece_Br, # 24632
+            ModelID.Map_Piece_Top_Left, # 24629
+            ModelID.Map_Piece_Top_Right, # 24630
+            ModelID.Map_Piece_Bottom_Left, # 24631
+            ModelID.Map_Piece_Bottom_Right, # 24632
         }
         item_ids = ItemArray.Filter.ByCondition(item_ids, lambda item_id: Item.GetModelID(item_id) not in map_piece_model_ids)
 
@@ -484,10 +489,10 @@ def check_looted_items():
                 ModelID.Slice_Of_Pumpkin_Pie  # 28436
             },
             "map_pieces": lambda item_id: Item.GetModelID(item_id) in {
-                ModelID.Map_Piece_Tl, # 24629
-                ModelID.Map_Piece_Tr, # 24630
-                ModelID.Map_Piece_Bl, # 24631
-                ModelID.Map_Piece_Br, # 24632
+                ModelID.Map_Piece_Top_Left, # 24629
+                ModelID.Map_Piece_Top_Right, # 24630
+                ModelID.Map_Piece_Bottom_Left, # 24631
+                ModelID.Map_Piece_Bottom_Right, # 24632
             },
             # --- END CORRECTION ---
         }
@@ -1391,7 +1396,7 @@ def CanCast():
 
     if (
         Agent.IsCasting(player_agent_id) 
-        or Agent.GetCastingSkill(player_agent_id) != 0
+        or Agent.GetCastingSkillID(player_agent_id) != 0
         or Agent.IsKnockedDown(player_agent_id)
         or Agent.IsDead(player_agent_id)
         or SkillBar.GetCasting() != 0
@@ -1728,6 +1733,8 @@ def assign_skill_ids():
 
 def check_norn_title():
     norntitle = Player.GetTitle(41)
+    if norntitle is None:
+        return
     if norntitle.current_points > 160000:
         FSM_vars.state_machine.jump_to_state_by_name("Route Aggro Left")
 
@@ -2013,7 +2020,8 @@ def get_escape_location(scaling_factor=50):
     player_x, player_y = Player.GetXY()
     
     # Initialize VectorFields with the player's position
-    vector_fields = Utils.VectorFields(probe_position=(player_x, player_y))
+    from ...Py4GWCoreLib import VectorFields
+    vector_fields = VectorFields(probe_position=(player_x, player_y))
 
     # Get and filter the enemy array
     enemy_array = AgentArray.GetEnemyArray()

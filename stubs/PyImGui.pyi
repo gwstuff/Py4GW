@@ -54,10 +54,11 @@ class WindowFlags(IntEnum):
     NoFocusOnAppearing = 1 << 12
     NoBringToFrontOnFocus = 1 << 13
     AlwaysVerticalScrollbar = 1 << 14
-    AlwaysHorizontalScrollbar = 1 << 15
-    NoNavInputs = 1 << 16
-    NoNavFocus = 1 << 17
-    UnsavedDocument = 1 << 18
+    AlwaysHorizontalScrollbar = 1 << 1
+    NoInputs = 1 << 16
+    NoNavInputs = 1 << 17
+    NoNavFocus = 1 << 18
+    UnsavedDocument = 1 << 19
 
 class InputTextFlags(IntEnum):
     NoFlag = 0
@@ -284,6 +285,8 @@ class ImGuiCol(IntEnum):
     NavWindowingHighlight = 50
     NavWindowingDimBg = 51
     ModalWindowDimBg = 52
+
+ImGuiCol_COUNT = 53
     
 class ImGuiCond(IntEnum):
     _None = 0
@@ -319,6 +322,27 @@ def text_wrapped(text: str) -> None: ...
 def text_colored(text: str, color: Tuple[float, float, float, float]) -> None: ...
 @staticmethod
 def text_disabled(text: str) -> None: ...
+@staticmethod
+def TextV(fmt: str, args: list[str]) -> None:
+    """ Displays formatted text using printf-style formatting. Example: TextV("Hello %s!", ["World"]) """
+@staticmethod
+def TextColoredV(color: Tuple[float, float, float, float], fmt: str, args: list[str]) -> None:
+    """ Displays colored formatted text. Example: TextColoredV((1.0, 0.2, 0.2, 1.0), "HP: %s / %s", ["50", "100"]) """
+@staticmethod
+def TextDisabledV(fmt: str, args: list[str]) -> None:
+    """ Displays text in a disabled (grayed out) style. """
+@staticmethod
+def TextWrappedV(fmt: str, args: list[str]) -> None:
+    """ Displays formatted text with word wrapping. """
+@staticmethod
+def LabelTextV(label: str, fmt: str, args: list[str]) -> None:
+    """ Displays a label-value pair with formatting. Example: LabelTextV("Name", "%s", ["PlayerOne"]) """
+@staticmethod
+def BulletTextV(fmt: str, args: list[str]) -> None:
+    """ Displays formatted text preceded by a bullet. """
+@staticmethod
+def InputTextMultiline(label: str,text: str,size: Tuple[float, float],flags: int = 0) -> bool:
+    """ Displays a multiline text input box. Example: InputTextMultiline("Notes", "Initial text", (200.0, 100.0)) """
 @staticmethod
 def text_unformatted(text: str) -> None: ...
 @staticmethod
@@ -638,6 +662,18 @@ def draw_list_add_quad(x1: float, y1: float, x2: float, y2: float, x3: float, y3
 @staticmethod
 def draw_list_add_quad_filled(x1: float, y1: float, x2: float, y2: float, x3: float, y3: float, x4: float, y4: float, col: int) -> None: ...
 
+#Arcs
+@staticmethod
+def path_clear() -> None: ...
+@staticmethod
+def path_line_to(x: float, y: float) -> None: ...
+@staticmethod
+def path_arc_to(x: float, y: float, radius: float, a_min: float, a_max: float, num_segments: int = 0) -> None: ...
+@staticmethod
+def path_fill_convex(col: int) -> None: ...
+@staticmethod
+def path_stroke(col: int, closed: bool = False, thickness: float = 1.0) -> None: ...
+
 
 # Windows
 @staticmethod
@@ -789,3 +825,72 @@ def collapsing_header(label: str, flags: int) -> bool: ...
 def dummy(width:int, height:int) -> None: ...
 
 
+# pyimgui_style.pyi
+# StyleConfig <-> ImGui::GetStyle() sync
+
+from typing import Tuple
+
+Vec2 = Tuple[float, float]
+RGBA = Tuple[float, float, float, float]
+
+class StyleConfig:
+    def __init__(self) -> None: ...
+    def Pull(self) -> None: ...
+    def Push(self) -> None: ...
+    def Reset(self) -> None: ...
+
+    # Scalars
+    Alpha: float
+    DisabledAlpha: float
+    WindowRounding: float
+    WindowBorderSize: float
+    ChildRounding: float
+    ChildBorderSize: float
+    PopupRounding: float
+    PopupBorderSize: float
+    FrameRounding: float
+    FrameBorderSize: float
+    IndentSpacing: float
+    ColumnsMinSpacing: float
+    ScrollbarSize: float
+    ScrollbarRounding: float
+    GrabMinSize: float
+    GrabRounding: float
+    LogSliderDeadzone: float
+    TabRounding: float
+    TabBorderSize: float
+    TabMinWidthForCloseButton: float
+    SeparatorTextBorderSize: float
+    MouseCursorScale: float
+    CurveTessellationTol: float
+    CircleTessellationMaxError: float
+
+    # Vec2-like arrays (as tuples)
+    WindowPadding: Vec2
+    WindowMinSize: Vec2
+    WindowTitleAlign: Vec2
+    FramePadding: Vec2
+    ItemSpacing: Vec2
+    ItemInnerSpacing: Vec2
+    CellPadding: Vec2
+    TouchExtraPadding: Vec2
+    ButtonTextAlign: Vec2
+    SelectableTextAlign: Vec2
+    SeparatorTextAlign: Vec2
+    SeparatorTextPadding: Vec2
+    DisplayWindowPadding: Vec2
+    DisplaySafeAreaPadding: Vec2
+
+    # Bools
+    AntiAliasedLines: bool
+    AntiAliasedLinesUseTex: bool
+    AntiAliasedFill: bool
+
+    # Enums as ints
+    WindowMenuButtonPosition: int
+    ColorButtonPosition: int
+
+    # Color helpers (RGBA floats 0..1, no scaling performed)
+    #idx is ImGuiCol_ enum value
+    def get_color(self, ImGuiCol_val: int) -> RGBA: ...
+    def set_color(self, ImGuiCol_val: int, r: float, g: float, b: float, a: float) -> None: ...

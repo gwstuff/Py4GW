@@ -1,5 +1,11 @@
-from ctypes import Structure, c_int, c_float, c_bool
-from enum import Enum, IntEnum
+from ctypes import Structure, c_int, c_float, c_bool, c_wchar
+from enum import Enum, IntEnum, auto
+
+from PyUIManager import UIFrame
+from PyUIManager import FramePosition as UIFramePosition
+
+from Py4GWCoreLib.GlobalCache.SharedMemory import SHMEM_MAX_EMAIL_LEN
+
 from .constants import (
     MAX_NUM_PLAYERS,
     NUMBER_OF_SKILLS,
@@ -14,9 +20,15 @@ class PlayerBuff(Structure):
         ("LastUpdated", c_int),
     ]
     
+    # Type hints for IntelliSense
+    PlayerID: int
+    Buff_id: int
+    LastUpdated: int
+    
 
 class PlayerStruct(Structure):
     _fields_ = [
+        ("AccountEmail", c_wchar * SHMEM_MAX_EMAIL_LEN),
         ("PlayerID", c_int),
         ("Energy_Regen", c_float),
         ("Energy", c_float),
@@ -28,6 +40,19 @@ class PlayerStruct(Structure):
         ("FollowAngle", c_float),
         ("LastUpdated", c_int),
     ]
+    
+    # Type hints for IntelliSense
+    AccountEmail: str
+    PlayerID: int
+    Energy_Regen: float
+    Energy: float
+    IsActive: bool
+    IsHero: bool
+    IsFlagged: bool
+    FlagPosX: float
+    FlagPosY: float
+    FollowAngle: float
+    LastUpdated: int
 
 
 class CandidateStruct(Structure):
@@ -40,32 +65,36 @@ class CandidateStruct(Structure):
         ("SummonedBy", c_int),
         ("LastUpdated", c_int),
     ]
+    
+    # Type hints for IntelliSense
+    PlayerID: int
+    MapID: int
+    MapRegion: int
+    MapDistrict: int
+    InvitedBy: int 
+    SummonedBy: int
+    LastUpdated: int
 
 
 class MemSkill(Structure):
     _fields_ = [
         ("Active", c_bool),
     ]
-
-class GameOptionStruct(Structure):
-    _pack_ = 1
-    _fields_ = [
-        ("Following", c_bool),
-        ("Avoidance", c_bool), 
-        ("Looting", c_bool), 
-        ("Targeting", c_bool),
-        ("Combat", c_bool),
-        ("Skills", MemSkill * NUMBER_OF_SKILLS),
-        ("WindowVisible", c_bool),
-    ] 
+    
+    # Type hints for IntelliSense
+    Active: bool
 
 class GameStruct(Structure):
     _fields_ = [
         ("Players", PlayerStruct * MAX_NUM_PLAYERS),
         ("Candidates", CandidateStruct * MAX_NUM_PLAYERS),
-        ("GameOptions", GameOptionStruct * MAX_NUM_PLAYERS),
         ("PlayerBuffs", PlayerBuff * MAX_NUMBER_OF_BUFFS),
-    ]
+    ]    
+    
+    # Type hints for IntelliSense
+    Players: list[PlayerStruct]
+    Candidates: list[CandidateStruct]
+    PlayerBuffs: list[PlayerBuff]
 
 
 class Skilltarget (IntEnum):
@@ -99,10 +128,13 @@ class Skilltarget (IntEnum):
     EnemyEnchanted = 30
     EnemyMoving = 31
     EnemyKnockedDown = 32
-    
-    
-    
-   
+    EnemyBleeding = 33
+    EnemyPoisoned = 34
+    EnemyCrippled = 35
+    EnemyHealthy = 36
+
+
+
 class SkillNature (Enum):
     Offensive = 0
     Enchantment_Removal = 1
@@ -166,6 +198,15 @@ class SkillType (Enum):
     Chant = 27
     EchoRefrain = 28
     Disguise = 29
+    
 
-
-
+class Docked (IntEnum):
+    Freely = 0
+    PartyWindow = auto()
+    Skillbar = auto()    
+    
+    
+class FramePosition:
+    def __init__(self, frame_id: int):
+        self.frame_id = frame_id
+        self.position: UIFramePosition = UIFrame(frame_id).position

@@ -1,8 +1,9 @@
 from tkinter.constants import N
 from typing import Any, Generator, override
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range
+from Py4GWCoreLib import GLOBAL_CACHE, Agent, Range, Player
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
+from Widgets.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
 from Widgets.CustomBehaviors.primitives.helpers.targeting_order import TargetingOrder
@@ -12,18 +13,20 @@ from Widgets.CustomBehaviors.primitives.skills.custom_skill_utility_base import 
 
 
 class IAmUnstoppableUtility(CustomSkillUtilityBase):
-    def __init__(self, 
-        current_build: list[CustomSkill], 
+    def __init__(self,
+        event_bus: EventBus,
+        current_build: list[CustomSkill],
         score_definition: ScoreStaticDefinition = ScoreStaticDefinition(90),
         mana_required_to_cast: int = 0,
         allowed_states: list[BehaviorState] = [BehaviorState.IN_AGGRO]
         ) -> None:
 
         super().__init__(
-            skill=CustomSkill("I_Am_Unstoppable"), 
-            in_game_build=current_build, 
-            score_definition=score_definition, 
-            mana_required_to_cast=mana_required_to_cast, 
+            event_bus=event_bus,
+            skill=CustomSkill("I_Am_Unstoppable"),
+            in_game_build=current_build,
+            score_definition=score_definition,
+            mana_required_to_cast=mana_required_to_cast,
             allowed_states=allowed_states)
         
         self.score_definition: ScoreStaticDefinition = score_definition
@@ -31,8 +34,8 @@ class IAmUnstoppableUtility(CustomSkillUtilityBase):
     @override
     def _evaluate(self, current_state: BehaviorState, previously_attempted_skills: list[CustomSkill]) -> float | None:
 
-        player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
-        current_heath_percent = GLOBAL_CACHE.Agent.GetHealth(player_agent_id)
+        player_agent_id = Player.GetAgentID()
+        current_heath_percent = Agent.GetHealth(player_agent_id)
 
         if current_heath_percent < 1: return self.score_definition.get_score()
         return None

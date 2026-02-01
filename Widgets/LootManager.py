@@ -1,11 +1,8 @@
-import os
-import json
-import time
-from Py4GWCoreLib import *
-
 import tkinter as tk
-from tkinter import filedialog
 from datetime import datetime, timedelta
+from tkinter import filedialog
+
+from Py4GWCoreLib import *
 
 # Use hidden root for file dialogs
 tk_root = tk.Tk()
@@ -192,16 +189,16 @@ def load_loot_config():
     if loot_filter_singleton.loot_gold_coins:
         loot_filter_singleton.AddToWhitelist(ModelID.Gold_Coins.value)
 
-    # 🔥 Rebuild singleton whitelist
+    # Rebuild singleton whitelist
     loot_filter_singleton.ClearWhitelist()
     for item in loot_items:
-        if item.get("enabled", False):
+        if item.get("enabled", False) and item.get("group") != "Dyes":  # ← guard out dyes
             model_id = item.get("model_id")
             if isinstance(model_id, str) and model_id.startswith("ModelID."):
                 model_id_name = model_id.split("ModelID.")[1]
                 if hasattr(ModelID, model_id_name):
                     model_id = getattr(ModelID, model_id_name)
-            loot_filter_singleton.AddToWhitelist(model_id)
+            loot_filter_singleton.AddToWhitelist(_normalize_model_id(model_id))
 
     # ——— KEEP GOLD COINS WHITELISTED ———
     if loot_filter_singleton.loot_gold_coins:
@@ -380,6 +377,27 @@ def _format_model_id(mid: int) -> str:
     except ValueError:
         pretty = "Unknown Item"
     return f"{pretty} (ModelID: {mid})"
+
+def _normalize_model_id(mid):
+    """
+    Return a numeric model id or None.
+    Accepts ints, ModelID enum members, and strings like 'ModelID.Foo'.
+    """
+    try:
+        if isinstance(mid, int):
+            return mid
+        if isinstance(mid, ModelID):
+            return mid.value
+        if isinstance(mid, str):
+            if mid.startswith("ModelID."):
+                name = mid.split(".", 1)[1]
+                if hasattr(ModelID, name):
+                    return getattr(ModelID, name).value
+            return None
+        # last resort (will raise if not numeric)
+        return int(mid)
+    except Exception:
+        return None
 
 def get_current_nick_item_by_formula():
     if not nick_cycles:
@@ -710,9 +728,31 @@ def DrawWhitelistViewer():
             PyImGui.text("Filtered By ModelID")
             PyImGui.separator()
 
-            # raw_whitelist is a list of ints
-            for raw_mid in sorted(loot_filter_singleton.GetWhitelist()):
+            # normalize everything to ints before sorting to avoid '<' TypeError
+            normalized = []
+            for raw in loot_filter_singleton.GetWhitelist():
+                val = _normalize_model_id(raw)
+                if val is not None:
+                    normalized.append(val)
+
+            for raw_mid in sorted(normalized):
                 PyImGui.text(_format_model_id(raw_mid))
+
+            # --- NEW: show dye whitelist nicely ---
+            PyImGui.separator()
+            PyImGui.text("Filtered By Dye Color")
+            PyImGui.separator()
+            try:
+                from Py4GWCoreLib import DyeColor
+                for dye_id in sorted(loot_filter_singleton.GetDyeWhitelist()):
+                    try:
+                        # pretty name like "Black" -> "Black Dye"
+                        dye_name = DyeColor(dye_id).name.replace("_", " ")
+                        PyImGui.text(f"{dye_name} Dye (DyeID: {dye_id})")
+                    except Exception:
+                        PyImGui.text(f"Unknown Dye (DyeID: {dye_id})")
+            except Exception as e:
+                PyImGui.text(f"Error reading dye whitelist: {e}")
 
     PyImGui.end()
 
@@ -747,7 +787,9 @@ def DrawFilteredLootList():
     for agent_id in loot_array:
         try:
             # get raw model-ID and distance
-            item_data = Agent.GetItemAgent(agent_id)
+            item_data = Agent.GetItemAgentByID(agent_id)
+            if item_data is None:
+                continue
             raw_mid   = Item.GetModelID(item_data.item_id)
             dist      = Utils.Distance(Player.GetXY(), Agent.GetXY(agent_id))
 

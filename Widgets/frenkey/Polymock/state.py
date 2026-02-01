@@ -2,6 +2,7 @@ import datetime
 from Py4GWCoreLib import AgentArray, Quest
 from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
 from Py4GWCoreLib.Item import Bag
+from Py4GWCoreLib import Map, Agent
 from Py4GWCoreLib.Py4GWcorelib import ConsoleLog, Utils
 from Py4GWCoreLib.enums import Allegiance, Bags, ItemType
 from Widgets.frenkey.Polymock.data import Polymock_Quest, Polymock_Quests, Polymock_Spawns, PolymockPieces
@@ -45,16 +46,16 @@ class WidgetState:
         )
     
     def get_quest(self):        
-        map_id = GLOBAL_CACHE.Map.GetMapID()
+        map_id = Map.GetMapID()
         
         self.in_arena = False
         for spawn in Polymock_Spawns:
             if spawn.value[0] == map_id:
                 self.in_arena = True                
-                self.match_started = len(GLOBAL_CACHE.AgentArray.GetAgentArray()) == 9 or self.match_started
+                self.match_started = len(AgentArray.GetAgentArray()) == 9 or self.match_started
                 
                 target_id = self.GetAgentAtPosition()
-                quest = Polymock_Quests.get_quest_by_model_id(GLOBAL_CACHE.Agent.GetModelID(target_id))
+                quest = Polymock_Quests.get_quest_by_model_id(Agent.GetModelID(target_id))
                 
                 if quest:                
                     self.quest = quest       
@@ -80,8 +81,8 @@ class WidgetState:
         self.quest = None
     
     def GetAgentAtPosition(self) -> int:
-        agents = GLOBAL_CACHE.AgentArray.GetAgentArray()
-        map_id = GLOBAL_CACHE.Map.GetMapID()
+        agents = AgentArray.GetAgentArray()
+        map_id = Map.GetMapID()
 
         spawn_point = next(
             (spawn for spawn in Polymock_Spawns if spawn.value[0] == map_id), None)
@@ -96,7 +97,7 @@ class WidgetState:
         agent_id = Utils.GetFirstFromArray(agent_array)
 
         if agent_id:
-            x, y = GLOBAL_CACHE.Agent.GetXY(agent_id)
+            x, y = Agent.GetXY(agent_id)
             distance = Utils.Distance(spawn_point, [x, y])
             if distance < 250.0:
                 return agent_id

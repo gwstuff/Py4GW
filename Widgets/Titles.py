@@ -1,6 +1,7 @@
 from Py4GWCoreLib import ThrottledTimer
 from Py4GWCoreLib import Routines
-from Py4GWCoreLib import GLOBAL_CACHE
+from Py4GWCoreLib import Map
+from Py4GWCoreLib import Player
 from Py4GWCoreLib import TitleID
 
 
@@ -83,7 +84,7 @@ def main():
     game_throttle_timer.Reset()
     
     is_map_valid = Routines.Checks.Map.MapValid()
-    is_explorable = GLOBAL_CACHE.Map.IsExplorable()
+    is_explorable = Map.IsExplorable()
     
     if not is_map_valid:
         widget_config.title_applied = False
@@ -93,19 +94,19 @@ def main():
         widget_config.title_applied = False
         return
     
-    map_name = GLOBAL_CACHE.Map.GetMapName()
+    map_name = Map.GetMapName()
 
     if not widget_config.title_applied:
         if map_name in asuran_map_names:
-            GLOBAL_CACHE.Player.SetActiveTitle(TitleID.Asuran.value)
+            Player.SetActiveTitle(TitleID.Asuran.value)
         elif map_name in deldrimor_map_names:
-            GLOBAL_CACHE.Player.SetActiveTitle(TitleID.Deldrimor.value)
+            Player.SetActiveTitle(TitleID.Deldrimor.value)
         elif map_name in norn_map_names:
-            GLOBAL_CACHE.Player.SetActiveTitle(TitleID.Norn.value)
+            Player.SetActiveTitle(TitleID.Norn.value)
         elif map_name in vanguard_map_names:
-            GLOBAL_CACHE.Player.SetActiveTitle(TitleID.Vanguard.value)
+            Player.SetActiveTitle(TitleID.Ebon_Vanguard.value)
         elif map_name in lightbringer_map_names:
-            GLOBAL_CACHE.Player.SetActiveTitle(TitleID.Lightbringer.value)
+            Player.SetActiveTitle(TitleID.Lightbringer.value)
         widget_config.title_applied = True
 
 if __name__ == "__main__":

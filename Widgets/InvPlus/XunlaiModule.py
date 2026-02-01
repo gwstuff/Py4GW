@@ -1,5 +1,6 @@
 
 import PyImGui
+import Py4GW
 from typing import Dict
 
 
@@ -12,8 +13,7 @@ from Py4GWCoreLib import IconsFontAwesome5
 from Py4GWCoreLib import ModelID
 from Py4GWCoreLib import UIManager
 from Py4GWCoreLib import GLOBAL_CACHE
-from Py4GWCoreLib.enums import ItemModelTextureMap
-from Widgets.InvPlus.GUI_Helpers import (TabIcon, 
+from Widgets.InvPlus.GUI_Helpers import (TabIcon,
                                          Frame,
                                             floating_game_button,   
                                             game_button,
@@ -28,12 +28,17 @@ from Widgets.InvPlus.GUI_Helpers import (TabIcon,
                                             XUNLAI_VAULT_FRAME_HASH
                             )         
 from Widgets.InvPlus.Coroutines import IdentifyCheckedItems
+from Py4GWCoreLib import IniHandler
 
 class XunlaiModule:   
     def __init__(self, inventory_frame: Frame):
         self.MODULE_NAME = "Xunlai"
         self.inventory_frame = inventory_frame
         self.show_transfer_buttons = True
+        projects_path = Py4GW.Console.get_projects_path()
+        full_path = projects_path + "\\Widgets\\Config\\InventoryPlus.ini"
+        self.ini = IniHandler(full_path)
+        self.show_transfer_buttons = self.ini.read_bool("XunlaiOptions", "show_transfer_buttons", self.show_transfer_buttons)   
 
     #region DrawXunlaiBottomStrip
     def draw_xunlai_bottom_strip(self):
@@ -62,7 +67,7 @@ class XunlaiModule:
             PyImGui.same_line(0,-1)
             PyImGui.text("|")
             PyImGui.same_line(0,-1)  
-
+            self.ini.write_key("XunlaiOptions", "show_transfer_buttons", self.show_transfer_buttons)
         PyImGui.end()
         PyImGui.pop_style_var(2)
         

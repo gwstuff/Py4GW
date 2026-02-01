@@ -1,9 +1,10 @@
 from typing import List, Any, Generator, Callable, override
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range
+from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range, Agent, Player
 from Py4GWCoreLib.enums import SpiritModelID
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
-from Widgets.CustomBehaviors.primitives.bus.event_bus import EVENT_BUS
+
+from Widgets.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Widgets.CustomBehaviors.primitives.bus.event_type import EventType
 from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
@@ -15,9 +16,10 @@ from Widgets.CustomBehaviors.primitives.skills.custom_skill_utility_base import 
 
 
 class ProtectiveSpiritUtility(CustomSkillUtilityBase):
-    def __init__(self, 
+    def __init__(self,
+        event_bus: EventBus,
         skill: CustomSkill,
-        current_build: list[CustomSkill], 
+        current_build: list[CustomSkill],
         owned_spirit_model_id: SpiritModelID,
         score_definition: ScoreStaticDefinition = ScoreStaticDefinition(60),
         mana_required_to_cast: int = 0,
@@ -25,8 +27,9 @@ class ProtectiveSpiritUtility(CustomSkillUtilityBase):
         ) -> None:
 
         super().__init__(
-            skill=skill, 
-            in_game_build=current_build, 
+            event_bus=event_bus,
+            skill=skill,
+            in_game_build=current_build,
             score_definition=score_definition,
             mana_required_to_cast=mana_required_to_cast, 
             allowed_states=allowed_states)
@@ -39,11 +42,11 @@ class ProtectiveSpiritUtility(CustomSkillUtilityBase):
     def _evaluate(self, current_state: BehaviorState, previously_attempted_skills: list[CustomSkill]) -> float | None:
 
         # Check if we have Soul Twisting active
-        has_soul_twisting = Routines.Checks.Effects.HasBuff(GLOBAL_CACHE.Player.GetAgentID(), self.soul_twisting_skill.skill_id)
+        has_soul_twisting = Routines.Checks.Effects.HasBuff(Player.GetAgentID(), self.soul_twisting_skill.skill_id)
         if not has_soul_twisting:
             return None  # Don't cast without Soul Twisting
 
-        buff_time_remaining = GLOBAL_CACHE.Effects.GetEffectTimeRemaining(GLOBAL_CACHE.Player.GetAgentID(), self.soul_twisting_skill.skill_id)
+        buff_time_remaining = GLOBAL_CACHE.Effects.GetEffectTimeRemaining(Player.GetAgentID(), self.soul_twisting_skill.skill_id)
 
         if buff_time_remaining <= 1200:  # Don't cast if Soul Twisting is about to expire
             return None
@@ -53,14 +56,14 @@ class ProtectiveSpiritUtility(CustomSkillUtilityBase):
             if custom_behavior_helpers.Resources.is_spirit_exist(
                     within_range=Range.Spellcast,
                     associated_to_skill=self.custom_skill,
-                    condition=lambda agent_id: GLOBAL_CACHE.Agent.GetHealth(agent_id) < 0.80): # we only refresh low life spirits
+                    condition=lambda agent_id: Agent.GetHealth(agent_id) < 0.80): # we only refresh low life spirits
                 return self.score_definition.get_score()
 
         # Check if we need to cast the spirit
         if not custom_behavior_helpers.Resources.is_spirit_exist(
                 within_range=Range.Spellcast,
                 associated_to_skill=self.custom_skill,
-                condition=lambda agent_id: GLOBAL_CACHE.Agent.GetHealth(agent_id) > 0.3):
+                condition=lambda agent_id: Agent.GetHealth(agent_id) > 0.3):
             return self.score_definition.get_score()  # High priority if spirit doesn't exist or is low health
             
         return None  # No need to cast if spirit exists and is healthy
@@ -70,6 +73,6 @@ class ProtectiveSpiritUtility(CustomSkillUtilityBase):
 
         result = yield from custom_behavior_helpers.Actions.cast_skill(self.custom_skill)
         if result == BehaviorResult.ACTION_PERFORMED:
-            EVENT_BUS.publish(EventType.SPIRIT_CREATED, self.owned_spirit_model_id)
+            yield from self.event_bus.publish(EventType.SPIRIT_CREATED, state, data=self.owned_spirit_model_id)
         
         return result

@@ -13,6 +13,7 @@ from Py4GWCoreLib import Routines
 from Py4GWCoreLib import GLOBAL_CACHE
 from Py4GWCoreLib import Map
 from Py4GWCoreLib import ProfessionTextureMap
+from Py4GWCoreLib import GWContext
 import traceback
 MODULE_NAME = "Switch Character"
 
@@ -42,10 +43,10 @@ class RerollCharacter:
      
     def _is_char_select_context_ready(self) -> bool:
         """Checks if character select is active and context is available."""
-        if not GLOBAL_CACHE.Player.InCharacterSelectScreen():
+        if not Map.Pregame.InCharacterSelectScreen():
             return False
-        pregame = GLOBAL_CACHE.Player.GetPreGameContext()
-        return pregame is not None and pregame.chars is not None
+        pregame = GWContext.PreGame.GetContext()
+        return pregame is not None and pregame.chars_list is not None
     
     def _get_target_index(self):
         """Finds and sets the index of the target character."""
@@ -53,22 +54,23 @@ class RerollCharacter:
             ConsoleLog("Reroll", "Char select context not ready for finding target.", Console.MessageType.Warning)
             return
 
-        pregame = GLOBAL_CACHE.Player.GetPreGameContext()
+        pregame = GWContext.PreGame.GetContext()
         target_name = self.target_character_name
         found_index = -99
         try:
-            for char in pregame.chars:
-                if target_name == char:
-                    found_index = pregame.chars.index(target_name)
-                    break
+            if pregame and pregame.chars_list:
+                for idx, char in enumerate(pregame.chars_list):
+                    if target_name == char.character_name:
+                        found_index = idx
+                        break
         except Exception as e:
             ConsoleLog("Reroll", f"Error accessing character list: {e}", Console.MessageType.Error)
             self.state = self.STATE_ERROR
             return
 
-        if found_index != -99:
+        if found_index != -99 and pregame:
             self.target_index = found_index
-            self.last_known_index = pregame.index_1
+            self.last_known_index = pregame.chosen_character_index
             ConsoleLog("Reroll", f"Found '{target_name}' at index {found_index}. Current selection: {self.last_known_index}", Console.MessageType.Info)
         else:
             ConsoleLog("Reroll", f"Character '{target_name}' not found in list yet.", Console.MessageType.Debug)
@@ -79,8 +81,10 @@ class RerollCharacter:
             ConsoleLog("Reroll", "Char select context not ready during navigation.", Console.MessageType.Warning)
             return
 
-        pregame = GLOBAL_CACHE.Player.GetPreGameContext()
-        current_index = pregame.index_1
+        pregame = GWContext.PreGame.GetContext()
+        if pregame is None:
+            return
+        current_index = pregame.chosen_character_index
 
         if current_index == self.target_index:
             return
@@ -109,7 +113,7 @@ class RerollCharacter:
             return
 
         if self.state == self.STATE_LOGGING_OUT:
-            if GLOBAL_CACHE.Player.InCharacterSelectScreen():
+            if Map.Pregame.InCharacterSelectScreen():
                 ConsoleLog("Reroll", "Character select screen detected.", Console.MessageType.Debug)
                 self.state = self.STATE_WAITING_FOR_CHAR_SELECT
                 self.step_timer.Start()
@@ -136,8 +140,10 @@ class RerollCharacter:
                  self.timeout_timer.Stop()
                  return
 
-            pregame = GLOBAL_CACHE.Player.GetPreGameContext()
-            current_index = pregame.index_1
+            pregame = GWContext.PreGame.GetContext()
+            if pregame is None:
+                return
+            current_index = pregame.chosen_character_index
 
             if current_index == self.target_index:
                 ConsoleLog("Reroll", "Target character is selected.", Console.MessageType.Debug)
@@ -154,7 +160,7 @@ class RerollCharacter:
                 self.step_timer.Stop()
 
         elif self.state == self.STATE_LOGGING_IN:
-            if not GLOBAL_CACHE.Player.InCharacterSelectScreen():
+            if not Map.Pregame.InCharacterSelectScreen():
                  if Map.IsMapReady() and GLOBAL_CACHE.Party.IsPartyLoaded():
                      ConsoleLog("Reroll", "Character logged in successfully.", Console.MessageType.Success)
                      self.state = self.STATE_IDLE
@@ -163,7 +169,7 @@ class RerollCharacter:
     def _update_character_list(self):
             """Updates the list of available character names if in character select."""
             try:
-                characters = GLOBAL_CACHE.Player.GetLoginCharacters()
+                characters = Map.Pregame.GetAvailableCharacterList()
                 if characters:
                     new_names = [char.player_name for char in characters]
                     self.characters = characters
@@ -200,7 +206,7 @@ class RerollCharacter:
         ConsoleLog("Reroll", f"Starting reroll to '{self.target_character_name}'...", Console.MessageType.Info)
         self.state = self.STATE_LOGGING_OUT
         self.timeout_timer.Start()
-        GLOBAL_CACHE.Player.LogoutToCharacterSelect()
+        Map.Pregame.LogoutToCharacterSelect()
         self.target_index = -99
         self.last_known_index = -99
             
@@ -280,7 +286,7 @@ def DrawWindow():
         
     #if PyImGui.begin(window_module.window_name, window_module.window_flags):
         new_collapsed = PyImGui.is_window_collapsed()      
-        characters = sorted(GLOBAL_CACHE.Player.GetLoginCharacters(), key=lambda c: c.player_name.lower())
+        characters = sorted(Map.Pregame.GetAvailableCharacterList(), key=lambda c: c.player_name.lower())
         
         
         # Define per-profession row colors using RGBA integers (0–255)
@@ -317,7 +323,7 @@ def DrawWindow():
                     level = 20 if character.is_pvp else character.level
                     current_map = character.map_id
                     campaign_origin = character.campaign
-                    current_map_name = GLOBAL_CACHE.Map.GetMapName(current_map)
+                    current_map_name = Map.GetMapName(current_map)
                     campaign_name = Campaign(campaign_origin).name if campaign_origin else "Unknown"
                     row_color = Color(0, 0, 0, 50)  # Default row color
                     

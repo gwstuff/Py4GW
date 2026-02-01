@@ -1,7 +1,7 @@
 import Py4GW
 from Py4GWCoreLib import Timer
 from Py4GWCoreLib import ImGui, PyImGui
-from Py4GWCoreLib import GLOBAL_CACHE
+from Py4GWCoreLib import GLOBAL_CACHE, Agent
 from Py4GWCoreLib import ConsoleLog
 from Py4GWCoreLib import ModelID, TitleID
 from Py4GWCoreLib import ItemArray
@@ -10,6 +10,8 @@ from Py4GWCoreLib import Routines
 from Py4GWCoreLib import Range
 from Py4GWCoreLib import Utils, Color
 from Py4GWCoreLib import LootConfig
+from Py4GWCoreLib import Map, Player
+from Py4GWCoreLib import VectorFields
 
 
 from time import sleep
@@ -248,7 +250,7 @@ def IsSkillBarLoaded():
     global bot_variables
     global skillbar
 
-    primary_profession, secondary_profession = GLOBAL_CACHE.Agent.GetProfessionNames(GLOBAL_CACHE.Player.GetAgentID())
+    primary_profession, secondary_profession = Agent.GetProfessionNames(Player.GetAgentID())
     if ((primary_profession == "Assassin" and secondary_profession != "Mesmer")):
 
         ConsoleLog(IsSkillBarLoaded, f"This bot requires A/Me to work, halting.", Py4GW.Console.MessageType.Error, log=True)
@@ -415,22 +417,22 @@ def filter_items_to_deposit():
     return items_to_deposit
 
 def player_is_dead_or_map_loading(destination_map_id=0):
-    if GLOBAL_CACHE.Map.IsMapLoading():
+    if Map.IsMapLoading():
         return True
-    if GLOBAL_CACHE.Agent.IsDead(GLOBAL_CACHE.Player.GetAgentID()):
+    if Agent.IsDead(Player.GetAgentID()):
         return True
     
-    if GLOBAL_CACHE.Map.GetMapID() == destination_map_id:
+    if Map.GetMapID() == destination_map_id:
         return True
     return False
 
     
 def player_is_dead():
-    return GLOBAL_CACHE.Agent.IsDead(GLOBAL_CACHE.Player.GetAgentID())
+    return Agent.IsDead(Player.GetAgentID())
 
 def handle_death():
-    if (GLOBAL_CACHE.Agent.IsDead(GLOBAL_CACHE.Player.GetAgentID()) or not bot_variables.config.is_script_running):
-        ConsoleLog(MODULE_NAME, f"Player is dead while traversing {GLOBAL_CACHE.Map.GetMapName(GLOBAL_CACHE.Map.GetMapID())} . Reseting Environment.", Py4GW.Console.MessageType.Error, log=bot_variables.config.log_to_console)
+    if (Agent.IsDead(Player.GetAgentID()) or not bot_variables.config.is_script_running):
+        ConsoleLog(MODULE_NAME, f"Player is dead while traversing {Map.GetMapName(Map.GetMapID())} . Reseting Environment.", Py4GW.Console.MessageType.Error, log=bot_variables.config.log_to_console)
         return True
     return False
 
@@ -454,9 +456,9 @@ def handle_return_inventory_check():
     return False
 
 def GetNotHexedEnemy():
-    player_pos = GLOBAL_CACHE.Player.GetXY()
+    player_pos = Player.GetXY()
     enemy_array = Routines.Agents.GetFilteredEnemyArray(player_pos[0],player_pos[1],Range.Spellcast.value)
-    enemy_array = AgentArray.Filter.ByCondition(enemy_array, lambda agent_id:not GLOBAL_CACHE.Agent.IsHexed(agent_id))
+    enemy_array = AgentArray.Filter.ByCondition(enemy_array, lambda agent_id:not Agent.IsHexed(agent_id))
     if len(enemy_array) == 0:
         return 0
     
@@ -474,10 +476,10 @@ def get_escape_location(scaling_factor=50):
         tuple: The escape destination (x, y).
     """
     # Get the player's current position
-    player_x, player_y = GLOBAL_CACHE.Player.GetXY()
+    player_x, player_y = Player.GetXY()
     
     # Initialize VectorFields with the player's position
-    vector_fields = Utils.VectorFields(probe_position=(player_x, player_y))
+    vector_fields = VectorFields(probe_position=(player_x, player_y))
 
     # Get and filter the enemy array
     enemy_array = AgentArray.GetEnemyArray()
@@ -567,16 +569,16 @@ def Handle_Stuck():
     """
     global bot_variables
     
-    longeyes_ledge = GLOBAL_CACHE.Map.GetMapIDByName("Longeyes Ledge")
-    bjora_marches = GLOBAL_CACHE.Map.GetMapIDByName("Bjora Marches")
-    jaga_moraine = GLOBAL_CACHE.Map.GetMapIDByName("Jaga Moraine")
+    longeyes_ledge = Map.GetMapIDByName("Longeyes Ledge")
+    bjora_marches = Map.GetMapIDByName("Bjora Marches")
+    jaga_moraine = Map.GetMapIDByName("Jaga Moraine")
 
-    if GLOBAL_CACHE.Map.IsMapLoading():
+    if Map.IsMapLoading():
         bot_variables.config.auto_stuck_command_timer.Reset()
         bot_variables.config.stuck_count = 0
         return
     
-    if GLOBAL_CACHE.Map.GetMapID() == longeyes_ledge:
+    if Map.GetMapID() == longeyes_ledge:
         bot_variables.config.auto_stuck_command_timer.Reset()
         bot_variables.config.non_movement_timer.Reset()
         bot_variables.config.stuck_count = 0
@@ -603,7 +605,7 @@ def Handle_Stuck():
     
     # Check for periodic "stuck" chat command
     if bot_variables.config.auto_stuck_command_timer.HasElapsed(5000):
-        GLOBAL_CACHE.Player.SendChatCommand("stuck")
+        Player.SendChatCommand("stuck")
         bot_variables.config.auto_stuck_command_timer.Reset()
 
     # Handle severe stuck situations
@@ -611,7 +613,7 @@ def Handle_Stuck():
         restart_due_to_stuck()
 
     # Detect and handle non-movement
-    if not GLOBAL_CACHE.Agent.IsMoving(GLOBAL_CACHE.Player.GetAgentID()):
+    if not Agent.IsMoving(Player.GetAgentID()):
         handle_non_movement()
     else:
         handle_player_movement()
@@ -633,15 +635,15 @@ def handle_non_movement():
 
     if bot_variables.config.non_movement_timer.HasElapsed(3000):
         bot_variables.config.non_movement_timer.Reset()
-        GLOBAL_CACHE.Player.SendChatCommand("stuck")
+        Player.SendChatCommand("stuck")
         escape_location = get_escape_location()
-        GLOBAL_CACHE.Player.Move(escape_location[0], escape_location[1])
+        Player.Move(escape_location[0], escape_location[1])
         bot_variables.config.stuck_count += 1
         log_stuck_attempt(escape_location)
 
 def handle_player_movement():
     """Tracks player movement and resets relevant timers if moving."""
-    new_player_x, new_player_y = GLOBAL_CACHE.Player.GetXY()
+    new_player_x, new_player_y = Player.GetXY()
     if bot_variables.config.old_player_x != new_player_x or bot_variables.config.old_player_y != new_player_y:
         bot_variables.config.non_movement_timer.Reset()
         bot_variables.config.old_player_x = new_player_x
@@ -650,7 +652,7 @@ def handle_player_movement():
 
 def log_stuck_attempt(escape_location):
     """Logs details of a recovery attempt."""
-    player_x, player_y = GLOBAL_CACHE.Player.GetXY()
+    player_x, player_y = Player.GetXY()
     distance = Utils.Distance((player_x, player_y), escape_location)
     ConsoleLog("StuckHandler", f"Player is stuck, attempting to recover to {escape_location} (distance: {distance:.2f})", Py4GW.Console.MessageType.Warning)
 
@@ -671,11 +673,11 @@ def RunBotSequentialLogic():
     
         log_to_console = bot_variables.config.log_to_console
         
-        longeyes_ledge = GLOBAL_CACHE.Map.GetMapIDByName("Longeyes Ledge")
-        bjora_marches = GLOBAL_CACHE.Map.GetMapIDByName("Bjora Marches")
-        jaga_moraine = GLOBAL_CACHE.Map.GetMapIDByName("Jaga Moraine")
+        longeyes_ledge = Map.GetMapIDByName("Longeyes Ledge")
+        bjora_marches = Map.GetMapIDByName("Bjora Marches")
+        jaga_moraine = Map.GetMapIDByName("Jaga Moraine")
         
-        primary_profession, _ = GLOBAL_CACHE.Agent.GetProfessionNames(GLOBAL_CACHE.Player.GetAgentID())
+        primary_profession, _ = Agent.GetProfessionNames(Player.GetAgentID())
         
         if not bot_variables.config.reset_from_jaga_moraine:
             ConsoleLog(MODULE_NAME, "Entering Longeyes Ledge", Py4GW.Console.MessageType.Info, log=log_to_console)
@@ -702,7 +704,7 @@ def RunBotSequentialLogic():
             yield from InventoryHandler(log_to_console)
             #exit outpost
             ConsoleLog(MODULE_NAME, "Leaving Outpost", Py4GW.Console.MessageType.Info, log=log_to_console)
-            yield from Routines.Yield.Movement.FollowPath(path_points= path_points_to_leave_outpost, custom_exit_condition=lambda: GLOBAL_CACHE.Map.IsMapLoading() or not bot_variables.config.is_script_running, log=False)
+            yield from Routines.Yield.Movement.FollowPath(path_points= path_points_to_leave_outpost, custom_exit_condition=lambda: Map.IsMapLoading() or not bot_variables.config.is_script_running, log=False)
             ConsoleLog(MODULE_NAME, "Waiting for map load", Py4GW.Console.MessageType.Info, log=log_to_console)
             yield from Routines.Yield.Map.WaitforMapLoad(bjora_marches,log_to_console)
             bot_variables.config.pause_stuck_routine = False
@@ -761,7 +763,7 @@ def RunBotSequentialLogic():
             
         ConsoleLog(MODULE_NAME, "Killing enemies", Py4GW.Console.MessageType.Info, log=log_to_console)
         bot_variables.config.in_killing_routine = True
-        player_pos = GLOBAL_CACHE.Player.GetXY()
+        player_pos = Player.GetXY()
         enemy_array = Routines.Agents.GetFilteredEnemyArray(player_pos[0],player_pos[1],Range.Spellcast.value)
         while len(enemy_array) > 0: #sometimes not all enemies are killed
             if handle_death():
@@ -831,7 +833,7 @@ def BjoraMarchesSkillCasting():
         yield from Routines.Yield.wait(100)
         return
 
-    player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+    player_agent_id = Player.GetAgentID()
     deadly_paradox = bot_variables.skillbar.deadly_paradox
     shadow_form = bot_variables.skillbar.shadow_form
     shroud_of_distress = bot_variables.skillbar.shroud_of_distress
@@ -847,18 +849,15 @@ def BjoraMarchesSkillCasting():
     has_deadly_paradox = Routines.Checks.Effects.HasBuff(player_agent_id,deadly_paradox)
     if shadow_form_buff_time_remaining <= 3500: #about to expire, recast
         #** Cast Deadly Paradox **
-        if Routines.Yield.Skills.CastSkillID(deadly_paradox,extra_condition=(not has_deadly_paradox), log=log_to_console, aftercast_delay=100):           
-            yield from Routines.Yield.wait(100)   
+        yield from Routines.Yield.Skills.CastSkillID(deadly_paradox,extra_condition=(not has_deadly_paradox), log=log_to_console, aftercast_delay=100)
         # ** Cast Shadow Form **
-        if Routines.Yield.Skills.CastSkillID(shadow_form, log=log_to_console, aftercast_delay=1250):
-            yield from Routines.Yield.wait(1250)
+        yield from Routines.Yield.Skills.CastSkillID(shadow_form, log=log_to_console, aftercast_delay=1250)
         return 
         
     #if were hurt, we need to cast shroud of distress 
-    if GLOBAL_CACHE.Agent.GetHealth(player_agent_id) < 0.45:
+    if Agent.GetHealth(player_agent_id) < 0.45:
         # ** Cast Shroud of Distress **
-        if Routines.Yield.Skills.CastSkillID(shroud_of_distress, log=log_to_console, aftercast_delay=1250):
-            yield from Routines.Yield.wait(1250)
+        if (yield from Routines.Yield.Skills.CastSkillID(shroud_of_distress, log=log_to_console, aftercast_delay=1250)):
             return
 
     #if we have an enemy behind us, we can escape with Heart of Shadow
@@ -866,14 +865,13 @@ def BjoraMarchesSkillCasting():
     if nearest_enemy:
         # ** Cast Heart of Shadow **
         is_enemy_behind = Routines.Checks.Agents.IsEnemyBehind(player_agent_id)
-        if Routines.Yield.Skills.CastSkillID(heart_of_shadow, extra_condition=is_enemy_behind, log=log_to_console, aftercast_delay=350):
-            yield from Routines.Yield.wait(350)
+        if (yield from Routines.Yield.Skills.CastSkillID(heart_of_shadow, extra_condition=is_enemy_behind, log=log_to_console, aftercast_delay=350)):
             return     
     yield
             
 
 def JagaMoraineSkillCasting():
-    player_agent_id = GLOBAL_CACHE.Player.GetAgentID()
+    player_agent_id = Player.GetAgentID()
     deadly_paradox = bot_variables.skillbar.deadly_paradox
     shadow_form = bot_variables.skillbar.shadow_form
     shroud_of_distress = bot_variables.skillbar.shroud_of_distress
@@ -898,22 +896,16 @@ def JagaMoraineSkillCasting():
         has_deadly_paradox = Routines.Checks.Effects.HasBuff(player_agent_id,deadly_paradox)
         if shadow_form_buff_time_remaining <= 3500: #about to expire, recast
             #** Cast Deadly Paradox **
-            if Routines.Yield.Skills.CastSkillID(deadly_paradox,extra_condition=(not has_deadly_paradox), log=log_to_console, aftercast_delay=100):
-                ConsoleLog(MODULE_NAME, "Casting Deadly Paradox.", Py4GW.Console.MessageType.Info, log=log_to_console)
-                yield from Routines.Yield.wait(100)
-            
+            yield from Routines.Yield.Skills.CastSkillID(deadly_paradox,extra_condition=(not has_deadly_paradox), log=log_to_console, aftercast_delay=100)
             # ** Cast Shadow Form **
-            if Routines.Yield.Skills.CastSkillID(shadow_form, log=log_to_console, aftercast_delay=1250):
-                ConsoleLog(MODULE_NAME, "Casting Shadow Form.", Py4GW.Console.MessageType.Info, log=log_to_console)
-                yield from Routines.Yield.wait(1250)
+            yield from Routines.Yield.Skills.CastSkillID(shadow_form, log=log_to_console, aftercast_delay=1250)
             return
                 
     #if were hurt, we need to cast shroud of distress 
-    if GLOBAL_CACHE.Agent.GetHealth(player_agent_id) < 0.45:
+    if Agent.GetHealth(player_agent_id) < 0.45:
         ConsoleLog(MODULE_NAME, "Casting Shroud of Distress.", Py4GW.Console.MessageType.Info, log=log_to_console)
         # ** Cast Shroud of Distress **
-        if Routines.Yield.Skills.CastSkillID(shroud_of_distress, log =log_to_console, aftercast_delay=1250):
-            yield from Routines.Yield.wait(1250)
+        if (yield from Routines.Yield.Skills.CastSkillID(shroud_of_distress, log =log_to_console, aftercast_delay=1250)):
             return
          
     #need to keep Channeling up
@@ -921,27 +913,24 @@ def JagaMoraineSkillCasting():
     if not has_channeling:
         ConsoleLog(MODULE_NAME, "Casting Channeling.", Py4GW.Console.MessageType.Info, log=log_to_console)
         # ** Cast Channeling **
-        if Routines.Yield.Skills.CastSkillID(channeling, log =log_to_console, aftercast_delay=1250):
-            yield from Routines.Yield.wait(1250)
+        if (yield from Routines.Yield.Skills.CastSkillID(channeling, log =log_to_console, aftercast_delay=1250)):
             return
             
     #Keep way of perfection up on recharge
     # ** Cast Way of Perfection **
-    if Routines.Yield.Skills.CastSkillID(way_of_perfection, log=log_to_console, aftercast_delay=350):
+    if (yield from Routines.Yield.Skills.CastSkillID(way_of_perfection, log=log_to_console, aftercast_delay=350)):
         ConsoleLog(MODULE_NAME, "Casting Way of Perfection.", Py4GW.Console.MessageType.Info, log=log_to_console)
-        yield from Routines.Yield.wait(350)
         return
         
     # ** Heart of Shadow to Stay Alive or to get out of stuck**
     if not bot_variables.config.in_killing_routine:
-        if GLOBAL_CACHE.Agent.GetHealth(player_agent_id) < 0.35 or bot_variables.config.stuck_count > 0:
+        if Agent.GetHealth(player_agent_id) < 0.35 or bot_variables.config.stuck_count > 0:
             if bot_variables.config.pause_stuck_routine:
                 yield from Routines.Yield.Agents.ChangeTarget(player_agent_id)
             else:
                 yield from Routines.Yield.Agents.TargetNearestEnemy(Range.Earshot.value)
 
-            if Routines.Yield.Skills.CastSkillID(heart_of_shadow, log=log_to_console, aftercast_delay=350):
-                yield from Routines.Yield.wait(350)
+            if (yield from Routines.Yield.Skills.CastSkillID(heart_of_shadow, log=log_to_console, aftercast_delay=350)):
                 return
                 
     # ** Killing Routine **
@@ -952,19 +941,16 @@ def JagaMoraineSkillCasting():
         target = GetNotHexedEnemy()  
         if target:
             Routines.Yield.Agents.ChangeTarget(target)
-            if Routines.Yield.Skills.CastSkillSlot(arcane_echo_slot, extra_condition=both_ready, log=log_to_console, aftercast_delay=2000):
+            if (yield from Routines.Yield.Skills.CastSkillSlot(arcane_echo_slot, extra_condition=both_ready, log=log_to_console, aftercast_delay=2000)):
                 ConsoleLog(MODULE_NAME, "Casting Arcane Echo.", Py4GW.Console.MessageType.Info, log=log_to_console)
-                yield from Routines.Yield.wait(2000)
             else:
-                if Routines.Yield.Skills.CastSkillSlot(arcane_echo_slot, log=log_to_console, aftercast_delay=350):
+                if (yield from Routines.Yield.Skills.CastSkillSlot(arcane_echo_slot, log=log_to_console, aftercast_delay=350)):
                     ConsoleLog(MODULE_NAME, "Casting Echoed Wastrel.", Py4GW.Console.MessageType.Info, log=log_to_console)
-                    yield from Routines.Yield.wait(350)
                     return
         target = GetNotHexedEnemy()  
         if target: 
             Routines.Yield.Agents.ChangeTarget(target)
-            if Routines.Yield.Skills.CastSkillSlot(wastrels_demise_slot, log=log_to_console, aftercast_delay=350):
-                yield from Routines.Yield.wait(350)
+            if (yield from Routines.Yield.Skills.CastSkillSlot(wastrels_demise_slot, log=log_to_console, aftercast_delay=350)):
                 return
     yield
 
@@ -975,16 +961,16 @@ def SkillHandler():
     global bot_variables
 
     while True:
-        longeyes_ledge = GLOBAL_CACHE.Map.GetMapIDByName("Longeyes Ledge")
-        bjora_marches = GLOBAL_CACHE.Map.GetMapIDByName("Bjora Marches")
-        jaga_moraine = GLOBAL_CACHE.Map.GetMapIDByName("Jaga Moraine")
+        longeyes_ledge = Map.GetMapIDByName("Longeyes Ledge")
+        bjora_marches = Map.GetMapIDByName("Bjora Marches")
+        jaga_moraine = Map.GetMapIDByName("Jaga Moraine")
         
         
         if not Routines.Checks.Map.MapValid():
             yield from Routines.Yield.wait(1000)
             continue
         
-        if not GLOBAL_CACHE.Map.IsExplorable():
+        if not Map.IsExplorable():
             yield from Routines.Yield.wait(1000)
             continue
         
@@ -997,9 +983,9 @@ def SkillHandler():
             yield from Routines.Yield.wait(1000)  
             continue
         
-        if GLOBAL_CACHE.Map.GetMapID() == bjora_marches:
+        if Map.GetMapID() == bjora_marches:
             yield from BjoraMarchesSkillCasting()
-        elif GLOBAL_CACHE.Map.GetMapID() == jaga_moraine:  
+        elif Map.GetMapID() == jaga_moraine:  
             yield from JagaMoraineSkillCasting()
         
         yield
@@ -1134,13 +1120,13 @@ def main():
 
         DrawWindow()
         
-        if GLOBAL_CACHE.Map.IsMapLoading():
+        if Map.IsMapLoading():
             GLOBAL_CACHE._ActionQueueManager.ResetAllQueues()
             bot_variables.config.auto_stuck_command_timer.Reset()
             bot_variables.config.stuck_count = 0
             return
             
-        if not Routines.Checks.Skills.InCastingProcess() and not GLOBAL_CACHE.Agent.IsKnockedDown(GLOBAL_CACHE.Player.GetAgentID()):  
+        if not Routines.Checks.Skills.InCastingProcess() and not Agent.IsKnockedDown(Player.GetAgentID()):  
             if bot_variables.config.is_script_running:
                 for coro in GLOBAL_CACHE.Coroutines[:]:
                     try:

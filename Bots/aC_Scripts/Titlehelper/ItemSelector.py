@@ -7,7 +7,8 @@ show_item_selector = False
 toggle_state = {
     "Alcohol": {},
     "Sweets": {},
-    "Party": {}
+    "Party": {},
+    "Tricks or Treats": {}
 }
 
 alcohol_items = {
@@ -53,7 +54,7 @@ sweets_items = {
     "3 Points - Sweets": [
         ModelID.Creme_Brulee,
         ModelID.Krytan_Lokum,
-        ModelID.Minitreats_Of_Purity,
+        ModelID.Minitreat_Of_Purity,
     ],
     "50 points - Sweets": [
         ModelID.Delicious_Cake,
@@ -73,8 +74,14 @@ party_items = {
     ],
 }
 
+tricks_or_treats_items = {
+    "Trick or Treat Bags": [
+        ModelID.Trick_Or_Treat_Bag,
+    ],
+}
+
 def init_toggle_state():
-    for cat, items in [("Alcohol", alcohol_items), ("Sweets", sweets_items), ("Party", party_items)]:
+    for cat, items in [("Alcohol", alcohol_items), ("Sweets", sweets_items), ("Party", party_items), ("Tricks or Treats", tricks_or_treats_items)]:
         for model_id in items:
             toggle_state[cat][model_id] = False
 
@@ -90,7 +97,8 @@ def draw_item_selector_window():
     for group_name, group_items in [
         ("Alcohol", alcohol_items),
         ("Sweets", sweets_items),
-        ("Party", party_items)
+        ("Party", party_items),
+        ("Tricks or Treats", tricks_or_treats_items)
     ]:
         if group_name not in toggle_state:
             toggle_state[group_name] = {}
@@ -104,7 +112,8 @@ def draw_item_selector_window():
     for group_name, group_items in [
         ("Alcohol", alcohol_items),
         ("Sweets", sweets_items),
-        ("Party", party_items)
+        ("Party", party_items),
+        ("Tricks or Treats", tricks_or_treats_items)
     ]:
         #PyImGui.text_colored(group_name, (0.9, 0.8, 0.3, 1.0))
 
@@ -112,14 +121,9 @@ def draw_item_selector_window():
             PyImGui.text_colored(row_label, (0.9, 0.8, 0.3, 1.0))
 
             for i, model_id in enumerate(model_ids):
-                base_path = os.path.abspath(os.path.join(os.getcwd()))
-                texture_name = f"[{model_id.value}] - {model_id.name.replace('_', ' ')}.png"
-                texture_path = os.path.join(base_path, "Textures", "Item Models", texture_name)
-                #Py4GW.Console.Log("ItemSelector", f"Loading texture: {texture_path}")
-
                 PyImGui.push_id(f"{group_name}_{row_label}_{i}")
                 selected = toggle_state[group_name][model_id]
-                new_selected = ImGui.image_toggle_button(str(model_id), texture_path, selected, 32, 32)
+                new_selected = ImGui.image_toggle_button(str(model_id), get_texture_for_model(model_id), selected, 32, 32)
                 toggle_state[group_name][model_id] = new_selected
                 PyImGui.pop_id()
 

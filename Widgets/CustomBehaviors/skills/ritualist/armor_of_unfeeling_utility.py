@@ -1,21 +1,20 @@
-from typing import List, Any, Generator, Callable, override
+from typing import Any, Generator, override
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range
 from Py4GWCoreLib.enums import SpiritModelID
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
+
+from Widgets.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Widgets.CustomBehaviors.primitives.bus.event_message import EventMessage
+from Widgets.CustomBehaviors.primitives.bus.event_type import EventType
 from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
-from Widgets.CustomBehaviors.primitives.helpers.targeting_order import TargetingOrder
-from Widgets.CustomBehaviors.primitives.scores.score_per_agent_quantity_definition import ScorePerAgentQuantityDefinition
 from Widgets.CustomBehaviors.primitives.scores.score_static_definition import ScoreStaticDefinition
 from Widgets.CustomBehaviors.primitives.skills.custom_skill import CustomSkill
 from Widgets.CustomBehaviors.primitives.skills.custom_skill_utility_base import CustomSkillUtilityBase
-from Widgets.CustomBehaviors.primitives.bus.event_type import EventType
-from Widgets.CustomBehaviors.primitives.bus.event_bus import EVENT_BUS
 
 class ArmorOfUnfeelingUtility(CustomSkillUtilityBase):
     def __init__(self, 
+        event_bus: EventBus,
         current_build: list[CustomSkill], 
         score_definition: ScoreStaticDefinition = ScoreStaticDefinition(80),
         mana_required_to_cast: int = 0,
@@ -23,6 +22,7 @@ class ArmorOfUnfeelingUtility(CustomSkillUtilityBase):
         ) -> None:
 
         super().__init__(
+            event_bus=event_bus,
             skill=CustomSkill("Armor_of_Unfeeling"), 
             in_game_build=current_build, 
             score_definition=score_definition,
@@ -32,9 +32,9 @@ class ArmorOfUnfeelingUtility(CustomSkillUtilityBase):
         self.score_definition: ScoreStaticDefinition = score_definition
         self.owned_spirits: list[SpiritModelID] = []
 
-        EVENT_BUS.subscribe(EventType.SPIRIT_CREATED, self.on_spirit_created)
+        self.event_bus.subscribe(EventType.SPIRIT_CREATED, self.on_spirit_created, subscriber_name=self.custom_skill.skill_name)
 
-    def on_spirit_created(self, message: EventMessage):
+    def on_spirit_created(self, message: EventMessage) -> Generator[Any, Any, Any]:
         spirit_model_id: SpiritModelID = message.data
         if spirit_model_id is None: return
 
@@ -44,6 +44,7 @@ class ArmorOfUnfeelingUtility(CustomSkillUtilityBase):
             return
 
         self.owned_spirits.append(spirit_model_id)
+        yield
 
     @override
     def _evaluate(self, current_state: BehaviorState, previously_attempted_skills: list[CustomSkill]) -> float | None:

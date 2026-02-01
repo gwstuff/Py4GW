@@ -6,6 +6,7 @@ from Py4GWCoreLib.Py4GWcorelib import ConsoleLog
 from Widgets.frenkey.Core import utility
 from Widgets.frenkey.Core.gui import GUI
 from Widgets.frenkey.Polymock import combat, data, state
+from datetime import datetime
 
 importlib.reload(combat)
 importlib.reload(data)
@@ -19,8 +20,7 @@ class UI:
             cls.combat = combat.Combat()
             cls.widget_state = state.WidgetState()
             cls.expanded = False
-            cls.gui_open = True        
-            cls.item_textures_path = "Textures\\Item Models\\"
+            cls.gui_open = True
         
         return cls._instance
                     
@@ -38,7 +38,7 @@ class UI:
             #     self.widget_state.quest = combat.Polymock_Quests[self.quest_names[self.quest_index]]
             #     ConsoleLog("Polymock", f"Selected quest: {self.widget_state.quest.name}")        
                         
-            current_map_id = GLOBAL_CACHE.Map.GetMapID()                        
+            current_map_id = Map.GetMapID()                        
         
             width, height = PyImGui.get_content_region_avail()
             button_width = (width - 10) / 2
@@ -58,10 +58,10 @@ class UI:
                     
                     if current_map_id == map_id:
                         if PyImGui.button("Move to Polymock Registration", width):
-                            GLOBAL_CACHE.Player.Move(position[0], position[1])
+                            Player.Move(position[0], position[1])
                     else:
                         if PyImGui.button("Travel to Rata Sum", width):
-                            GLOBAL_CACHE.Map.Travel(map_id)
+                            Map.Travel(map_id)
                             
                 elif quest_data and (not self.widget_state.in_arena or quest_data.is_completed):
                     if quest_data.is_completed:
@@ -69,17 +69,17 @@ class UI:
                         
                     map_name = ""
                     if quest_data:
-                        map_name = GLOBAL_CACHE.Map.GetMapName(quest_data.map_to) if quest_data.map_to > 0 else "Unknown"                
+                        map_name = Map.GetMapName(quest_data.map_to) if quest_data.map_to > 0 else "Unknown"                
                     
                         if current_map_id == quest_data.map_to:
                             if not self.widget_state.in_arena:
                                 if PyImGui.button("Move to Quest Marker", width):
                                     position = (quest_data.marker_x, quest_data.marker_y) if quest_data.marker_x < 100000 and quest_data.marker_y < 100000 else (self.widget_state.quest.marker_x, self.widget_state.quest.marker_y)
                                     # ConsoleLog("Polymock", f"Moving to quest marker at {position}")
-                                    GLOBAL_CACHE.Player.Move(position[0], position[1])
+                                    Player.Move(position[0], position[1])
                         else:
                             if PyImGui.button(f"Travel to {map_name}", width):
-                                GLOBAL_CACHE.Map.Travel(quest_data.map_to)   
+                                Map.Travel(quest_data.map_to)   
                                 
                 elif PyImGui.is_rect_visible(0, 20) and self.widget_state.quest and self.widget_state.in_arena:       
                     if not self.widget_state.match_started:
@@ -100,11 +100,11 @@ class UI:
                                         
                         PyImGui.table_next_column()                    
                         name = self.widget_state.quest.counter_pieces[i].value.name if i < len(self.widget_state.quest.counter_pieces) else "None"
-                        
-                        if os.path.exists(os.path.join(self.item_textures_path, self.widget_state.quest.counter_pieces[i].value.item_texture)):
+
+                        if self.widget_state.quest.counter_pieces[i].value.item_model_id != 0:
                             ImGui.DrawTexture(
-                                os.path.join(self.item_textures_path, self.widget_state.quest.counter_pieces[i].value.item_texture), 
-                                20, 20, 
+                                get_texture_for_model(self.widget_state.quest.counter_pieces[i].value.item_model_id),
+                                20, 20,
                             )
                         else:
                             PyImGui.dummy(20, 20)
@@ -121,10 +121,10 @@ class UI:
                 if current_map_id == data.Polymock_Registration[0]:
                     if PyImGui.button("Move to Master Hoff", width):
                         position = data.Polymock_Registration[1]
-                        GLOBAL_CACHE.Player.Move(data.Polymock_Quests.Master_Hoff.value.marker_x, data.Polymock_Quests.Master_Hoff.value.marker_y)
+                        Player.Move(data.Polymock_Quests.Master_Hoff.value.marker_x, data.Polymock_Quests.Master_Hoff.value.marker_y)
                 
                 elif PyImGui.button("Travel to Rata Sum", width):
-                    GLOBAL_CACHE.Map.Travel(data.Polymock_Registration[0])
+                    Map.Travel(data.Polymock_Registration[0])
                                                              
                 
             if PyImGui.is_rect_visible(0, 20) and self.widget_state.debug:
@@ -138,7 +138,7 @@ class UI:
                         
                 PyImGui.text("Map")
                 PyImGui.table_next_column()
-                PyImGui.text_wrapped(str(GLOBAL_CACHE.Map.GetMapName()) + " (ID: " + str(GLOBAL_CACHE.Map.GetMapID()) + ")")
+                PyImGui.text_wrapped(str(Map.GetMapName()) + " (ID: " + str(Map.GetMapID()) + ")")
 
                 PyImGui.table_next_column()
                         
@@ -171,7 +171,7 @@ class UI:
                 
                 PyImGui.text("Agents")
                 PyImGui.table_next_column()
-                agents = GLOBAL_CACHE.AgentArray.GetAgentArray()
+                agents = AgentArray.GetAgentArray()
                 if agents:
                     PyImGui.text_wrapped(f"{len(agents)}")
                 else:

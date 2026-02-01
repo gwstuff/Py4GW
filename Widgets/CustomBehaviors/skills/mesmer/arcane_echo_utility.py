@@ -4,8 +4,9 @@ from typing import Any, Generator, Callable, override
 
 import PyImGui
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines
+from Py4GWCoreLib import GLOBAL_CACHE, Routines, Player
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
+from Widgets.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Widgets.CustomBehaviors.primitives.helpers import custom_behavior_helpers
 from Widgets.CustomBehaviors.primitives.helpers.behavior_result import BehaviorResult
 from Widgets.CustomBehaviors.primitives.scores.score_static_definition import ScoreStaticDefinition
@@ -20,8 +21,9 @@ class ArcaneEchoState(Enum):
 
 class ArcaneEchoUtility(CustomSkillUtilityBase):
 
-    def __init__(self, 
-                    current_build: list[CustomSkill], 
+    def __init__(self,
+                    event_bus: EventBus,
+                    current_build: list[CustomSkill],
                     original_skill_to_copy: CustomSkillUtilityBase,
                     new_copied_instance: CustomSkillUtilityBase,
                     arcane_echo_score_definition: ScoreStaticDefinition = ScoreStaticDefinition(82),
@@ -29,8 +31,9 @@ class ArcaneEchoUtility(CustomSkillUtilityBase):
             ) -> None:
 
             super().__init__(
-                skill=CustomSkill("Arcane_Echo"), 
-                in_game_build=current_build, 
+                event_bus=event_bus,
+                skill=CustomSkill("Arcane_Echo"),
+                in_game_build=current_build,
                 score_definition=arcane_echo_score_definition,
                 allowed_states=allowed_states)
             
@@ -58,7 +61,7 @@ class ArcaneEchoUtility(CustomSkillUtilityBase):
     def _get_arcane_echo_state(self, current_state: BehaviorState) -> ArcaneEchoState:
 
         # if under ArcaneEcho effect, we are top priority to cast the skill we want to copy
-        if Routines.Checks.Effects.HasBuff(GLOBAL_CACHE.Player.GetAgentID(), self.custom_skill.skill_id):
+        if Routines.Checks.Effects.HasBuff(Player.GetAgentID(), self.custom_skill.skill_id):
             return ArcaneEchoState.CAST_SKILL_TO_COPY
 
         # arcane echo + skill to copy are available, and we have enough resources

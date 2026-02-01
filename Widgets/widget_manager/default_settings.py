@@ -250,6 +250,20 @@ global_widget_defaults = {
         "icon": "ICON_PEOPLE_CARRY",
         "quickdock": "True",
     },
+    "TeamInventoryViewer": {
+        "enabled": "False",
+        "category": "Gameplay",
+        "subcategory": "Utilities",
+        "icon": "ICON_BRAIN",
+        "quickdock": "True",
+    },
+    "CombatEventsTester": {
+        "enabled": "False",
+        "category": "Coding",
+        "subcategory": "Info",
+        "icon": "ICON_CROSSHAIRS",
+        "quickdock": "True",
+    },
     # TODO: Register your Widget here
 }
 
@@ -505,6 +519,27 @@ account_widget_defaults = {
         "category": "Gameplay",
         "subcategory": "Utilities",
         "icon": "ICON_PEOPLE_CARRY",
+        "quickdock": "True",
+    },
+    "EZ Cast": {
+        "enabled": "False",
+        "category": "Bots",
+        "subcategory": "Helpers",
+        "icon": "ICON_BRAIN",
+        "quickdock": "True",
+    },
+    "TeamInventoryViewer": {
+        "enabled": "False",
+        "category": "Gameplay",
+        "subcategory": "Utilities",
+        "icon": "ICON_BRAIN",
+        "quickdock": "True",
+    },
+    "CombatEventsTester": {
+        "enabled": "False",
+        "category": "Coding",
+        "subcategory": "Info",
+        "icon": "ICON_CROSSHAIRS",
         "quickdock": "True",
     },
     # TODO: Register your Widget here

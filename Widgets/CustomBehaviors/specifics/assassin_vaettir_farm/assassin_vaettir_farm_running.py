@@ -1,7 +1,7 @@
 from typing import List, Any, Generator, Callable, override
 import time
 from Widgets.CustomBehaviors.primitives.behavior_state import BehaviorState
-from Widgets.CustomBehaviors.primitives.bus.event_bus import EVENT_BUS
+
 from Widgets.CustomBehaviors.primitives.bus.event_type import EventType
 from Widgets.CustomBehaviors.primitives.scores.score_static_definition import ScoreStaticDefinition
 from Widgets.CustomBehaviors.primitives.skillbars.custom_behavior_base_utility import CustomBehaviorBaseUtility
@@ -34,9 +34,6 @@ class AssassinVaettirFarm_Running_UtilitySkillBar(CustomBehaviorBaseUtility):
 
         # how to make no coupling with hot-reload, dedicated folder for thoses ?
 
-    def player_stuck(self, heart_of_shadow_target_agent_id: int):
-        EVENT_BUS.publish(EventType.PLAYER_STUCK, heart_of_shadow_target_agent_id)
-
     @property
     @override
     def additional_autonomous_skills(self) -> list[CustomSkillUtilityBase]:
@@ -50,7 +47,7 @@ class AssassinVaettirFarm_Running_UtilitySkillBar(CustomBehaviorBaseUtility):
     
     @property
     @override
-    def skills_allowed_in_behavior(self) -> list[CustomSkillUtilityBase]:
+    def custom_skills_in_behavior(self) -> list[CustomSkillUtilityBase]:
         return [
             self.shroud_of_distress_utility,
             self.deadly_paradox_utility,

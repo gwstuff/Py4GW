@@ -6,11 +6,11 @@ from typing import Dict
 
 from Py4GWCoreLib import ImGui
 from Py4GWCoreLib import ColorPalette
-from Py4GWCoreLib import ItemArray
+from Py4GWCoreLib import Map
 from Py4GWCoreLib import Item
 from Py4GWCoreLib import Bags
 from Py4GWCoreLib import IconsFontAwesome5
-from Py4GWCoreLib import ModelID
+from Py4GWCoreLib import ModelID, ItemType
 from Py4GWCoreLib import UIManager
 from Py4GWCoreLib import GLOBAL_CACHE
 from Py4GWCoreLib import AutoInventoryHandler
@@ -18,7 +18,6 @@ from Py4GWCoreLib import Utils
 from Py4GWCoreLib import ConsoleLog
 from Py4GWCoreLib import Routines
 from Py4GWCoreLib import ThrottledTimer
-from Py4GWCoreLib.enums import ItemModelTextureMap
 from Py4GWCoreLib.enums import WindowID
 from Widgets.InvPlus.GUI_Helpers import (TabIcon, 
                                          Frame,
@@ -43,6 +42,79 @@ class AutoHandlderModule:
         self.inventory_frame_exists = False
         self.auto_handler = AutoInventoryHandler()
         self.inventory_check_throttle_timer = ThrottledTimer(100)
+    
+    def show_item_type_dialog_popup(self):
+        if self.auto_handler.show_item_type_dialog:
+            PyImGui.open_popup("Item Type Lookup")
+            self.auto_handler.show_item_type_dialog = False  # trigger only once
+
+        if PyImGui.begin_popup_modal("Item Type Lookup", True,PyImGui.WindowFlags.AlwaysAutoResize):
+            PyImGui.text("Item Type Lookup")
+            PyImGui.separator()
+
+            # Input + filter mode
+            self.auto_handler.item_type_search = PyImGui.input_text("Search", self.auto_handler.item_type_search)
+            search_lower = self.auto_handler.item_type_search.strip().lower()
+
+            self.auto_handler.item_type_search_mode = PyImGui.radio_button("Contains", self.auto_handler.item_type_search_mode, 0)
+            PyImGui.same_line(0, -1)
+            self.auto_handler.item_type_search_mode = PyImGui.radio_button("Starts With", self.auto_handler.item_type_search_mode, 1)
+
+            # Build reverse lookup: item_type - name
+            item_type_to_name = {member.value: name for name, member in ItemType.__members__.items()}
+
+            PyImGui.separator()
+
+            if PyImGui.begin_table("ItemTypeTable", 2):
+                PyImGui.table_setup_column("All Item Types", PyImGui.TableColumnFlags.WidthFixed)
+                PyImGui.table_setup_column("Blacklisted Item Types", PyImGui.TableColumnFlags.WidthStretch)
+
+                PyImGui.table_headers_row()
+                PyImGui.table_next_column()
+                # LEFT: All Item Types
+                if PyImGui.begin_child("ItemTypeList", (295, 375), True, PyImGui.WindowFlags.NoFlag):
+                    sorted_item_types = sorted(
+                        [(name, member.value) for name, member in ItemType.__members__.items()],
+                        key=lambda x: x[0].lower()
+                    )
+                    for name, item_type in sorted_item_types:
+                        name_lower = name.lower()
+                        if search_lower:
+                            if self.auto_handler.item_type_search_mode == 0 and search_lower not in name_lower:
+                                continue
+                            if self.auto_handler.item_type_search_mode == 1 and not name_lower.startswith(search_lower):
+                                continue
+
+                        label = f"{name} ({item_type})"
+                        if PyImGui.selectable(label, False, PyImGui.SelectableFlags.NoFlag, (0.0, 0.0)):
+                            if item_type not in self.auto_handler.item_type_blacklist:
+                                self.auto_handler.item_type_blacklist.append(item_type)
+                PyImGui.end_child()
+
+                # RIGHT: Blacklist
+                PyImGui.table_next_column()
+                if PyImGui.begin_child("BlacklistItemTypeList", (295, 375), True, PyImGui.WindowFlags.NoFlag):
+                    # Create list of (name, item_type) and sort by name
+                    sorted_blacklist = sorted(
+                        [(item_type_to_name.get(item_type, "Unknown"), item_type)
+                        for item_type in self.auto_handler.item_type_blacklist],
+                        key=lambda x: x[0].lower()
+                    )
+
+                    for name, item_type in sorted_blacklist:
+                        label = f"{name} ({item_type})"
+                        if PyImGui.selectable(label, False, PyImGui.SelectableFlags.NoFlag, (0.0, 0.0)):
+                            self.auto_handler.item_type_blacklist.remove(item_type)
+                PyImGui.end_child()
+
+
+
+                PyImGui.end_table()
+
+            if PyImGui.button("Close"):
+                PyImGui.close_current_popup()
+
+            PyImGui.end_popup_modal()
 
     def show_model_id_dialog_popup(self):
         if self.auto_handler.show_dialog_popup:
@@ -61,7 +133,7 @@ class AutoHandlderModule:
             PyImGui.same_line(0, -1)
             self.auto_handler.model_id_search_mode = PyImGui.radio_button("Starts With", self.auto_handler.model_id_search_mode, 1)
 
-            # Build reverse lookup: model_id → name
+            # Build reverse lookup: model_id - name
             model_id_to_name = {member.value: name for name, member in ModelID.__members__.items()}
 
             PyImGui.separator()
@@ -181,7 +253,7 @@ class AutoHandlderModule:
             PyImGui.pop_item_width()
             ImGui.show_tooltip("Changes will take effect after the next lookup.")
             
-            if not GLOBAL_CACHE.Map.IsExplorable():
+            if not Map.IsExplorable():
                 PyImGui.text("Auto Lookup only runs in explorable.")
             else:
                 remaining = self.auto_handler.lookup_throttle.GetTimeRemaining() / 1000  # convert ms to seconds
@@ -240,8 +312,13 @@ class AutoHandlderModule:
                     PyImGui.separator()
                     
                     if PyImGui.collapsing_header("Ignore Items"):
+                        PyImGui.text(f"{len(self.auto_handler.item_type_blacklist)} Blacklisted Item Types")
+                        if PyImGui.button("Ignore Item Types"):
+                            self.auto_handler.show_item_type_dialog = True
+                        
+                        PyImGui.separator()
+                        
                         PyImGui.text(f"{len(self.auto_handler.salvage_blacklist)} Blacklisted ModelIDs")
-
                         if PyImGui.button("Manage Ignore List"):
                             self.auto_handler.show_dialog_popup = True
 
@@ -309,7 +386,7 @@ class AutoHandlderModule:
             auto_handler.initialized = True
             ConsoleLog(self.MODULE_NAME, "Auto Widget Options initialized", Py4GW.Console.MessageType.Success)
             
-        if not GLOBAL_CACHE.Map.IsExplorable():
+        if not Map.IsExplorable():
             auto_handler.lookup_throttle.Stop()
             auto_handler.status = "Idle"
             if not auto_handler.outpost_handled and auto_handler.module_active:

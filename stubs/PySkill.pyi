@@ -1,5 +1,4 @@
 from typing import List, overload
-from PyMap import Campaign
 from PyAgent import Profession, AttributeClass
 
 class SkillID:
@@ -25,7 +24,7 @@ class SkillType:
 
 class Skill:
     id: SkillID
-    campaign: Campaign
+    campaign: int
     type: SkillType
     special: int
     combo_req: int
@@ -62,6 +61,7 @@ class Skill:
     target_overhead_animation_id: int
     projectile_animation1_id: int
     projectile_animation2_id: int
+    icon_file_hi_res_id: int
     icon_file_id: int
     icon_file2_id: int
     name_id: int

@@ -1,16 +1,9 @@
 # Necessary Imports
 import Py4GW        #Miscelanious functions and classes
 import PyImGui     #ImGui wrapper
-import PyMap        #Map functions and classes
-import PyAgent      #Agent functions and classes
-import PyPlayer     #Player functions and classes
-import PyParty      #Party functions and classes
-import PyItem       #Item functions and classes
-import PyInventory  #Inventory functions and classes
 import PySkill      #Skill functions and classes
 import PySkillbar   #Skillbar functions and classes
-import PyMerchant   #Merchant functions and classes
-import traceback    #traceback to log stack traces
+
 # End Necessary Imports
 
 
@@ -88,7 +81,8 @@ def draw_skilldata(input_skill_id):
 
         # Campaign, Titles, and Skill Information
         if PyImGui.collapsing_header("Campaign, Titles, and Skill Info"):
-            PyImGui.text(f"Campaign: {skill_instance.campaign.GetName()}")
+            from Py4GWCoreLib.Skill import Skill
+            PyImGui.text(f"Campaign: {Skill.GetCampaign(input_skill_id)[1]}")
             PyImGui.text(f"Title ID: {skill_instance.title}")
             PyImGui.text(f"PvP Skill ID: {skill_instance.id_pvp}")
             PyImGui.separator()
@@ -140,9 +134,9 @@ def draw_window():
             skill_template = PyImGui.input_text("Template String", skill_template)
             if PyImGui.button("Load Skill Template"):
                 if skillbar_instance.LoadSkillTemplate(skill_template):
-                    GW2Py_Py.log(Module_Name,"Template Loaded Successfully!")
+                    Py4GW.Console.Log(Module_Name,"Template Loaded Successfully!")
                 else:
-                    GW2Py_Py.log(Module_Name,"Failed to Load Template")
+                    Py4GW.Console.Log(Module_Name,"Failed to Load Template")
             PyImGui.separator()
             
             # Input field for selecting skill slot (limited to 1..8)

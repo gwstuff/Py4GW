@@ -146,7 +146,7 @@ class RawItemCache:
         bag_instance.GetContext()
         return bag_instance
     
-    def get_bags(self, bag_list: List[int]):
+    def get_bags(self, bag_list: List[int]) -> List[PyInventory.Bag]:
         """
         Returns a list of Bag instances for the given bag enums.
         """
@@ -291,7 +291,13 @@ class ItemCache:
         if item is None:
             return 0
         return item.model_id
-     
+
+    def GetModelFileID(self, item_id: int) -> int:
+        item = self.raw_item_array.get_item_by_id(item_id)
+        if item is None:
+            return 0
+        return item.model_file_id
+
     def GetSlot(self, item_id: int) -> int:
         item = self.raw_item_array.get_item_by_id(item_id)
         if item is None:

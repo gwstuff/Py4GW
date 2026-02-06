@@ -1,7 +1,6 @@
 import PyPlayer
 
 from .enums import *
-from .Agent import Agent
 from .native_src.internals.helpers import encoded_wstr_to_str
 from .Context import GWContext
 from functools import wraps
@@ -52,6 +51,7 @@ class Player:
         Returns: bool
         """
         from .Map import Map
+        from .Agent import Agent
         if not Map.IsMapReady():
             return False  
         if (player_number := Player.GetPlayerNumber()) is None:
@@ -119,6 +119,7 @@ class Player:
         Args: None
         Returns: str
         """
+        from .Agent import Agent
         return Agent.GetNameByID(Player.GetAgentID())
 
     @staticmethod
@@ -128,6 +129,7 @@ class Player:
         Args: None
         Returns: tuple (x, y)
         """
+        from .Agent import Agent
         return Agent.GetXY(Player.GetAgentID())
 
     
@@ -147,6 +149,8 @@ class Player:
         Args: None
         Returns: PyAgent
         """
+        from .Agent import Agent
+        
         if not Player.IsPlayerLoaded():
             return None
         
@@ -183,7 +187,14 @@ class Player:
         Args: None
         Returns: str
         """
+        from .Map import Map
         try:
+            if not Map.IsMapReady():
+                return ""
+            
+            if Map.IsInCinematic():
+                return ""
+            
             if not Player.IsPlayerLoaded():
                 return ""
             
@@ -219,6 +230,7 @@ class Player:
         Args: None
         Returns: int
         """
+        from .Agent import Agent
         return Agent.GetInstanceUptime(Player.GetAgentID())
     
     @staticmethod

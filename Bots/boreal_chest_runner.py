@@ -585,13 +585,6 @@ class BorealChestRunner():
 #endregion
 
 #region Movement logic
-    def resign_has_executed_guard(self):
-        if Checks.Map.MapValid():
-            return False
-        
-        self.log_debug("Resign has taken effect")
-        return True
-    
     def skill_routine_suspended_guard(self):
         if not self.skill_routine_suspended:
             return False
@@ -604,10 +597,10 @@ class BorealChestRunner():
         # or until the skill routine has been marked as suspended.
         yield from Routines.Yield.wait_until(lambda: self.skill_routine_suspended_guard(), 3000)
         self.log_info("Run finished, resigning")
-        yield from Routines.Yield.Player.Resign()
-        # Resign can take a random amount of time up to 5 seconds to take effect.
-        # This waits for 5 seconds or until resign has taken effect.
-        yield from Routines.Yield.wait_until(lambda: self.resign_has_executed_guard(), 5000)
+        Player.SendChatCommand("resign") 
+        # Wait until resign has taken effect
+        yield from Routines.Yield.wait_until(lambda: GLOBAL_CACHE.Party.IsPartyDefeated(), 10000)
+        GLOBAL_CACHE.Party.ReturnToOutpost()
         yield from Routines.Yield.Map.WaitforMapLoad(self.boreal_station_id)
 
     def pre_run_checks(self):
@@ -757,6 +750,9 @@ class BorealChestRunner():
         self.run_stats.two_chest_pct = (self.run_stats.two_chest_cnt/self.run_stats.runs_completed) * 100
         self.run_stats.three_chest_pct = (self.run_stats.three_chest_cnt/self.run_stats.runs_completed) * 100
 
+    def travel_to_boreal_station_if_not_there(self):
+        if Map.GetMapID() != self.boreal_station_id:
+            yield from Routines.Yield.Map.TravelToOutpost(self.boreal_station_id, self.log_to_console)
 
     def movement_and_merchant_routine(self):
         """Routine for movement, finding chests, and handling inventory"""
@@ -765,7 +761,7 @@ class BorealChestRunner():
         while True:
             yield from self.suspend_execution_until_map_is_valid()
             # Map travel to Boreal Station if not already there
-            yield from Routines.Yield.Map.TravelToOutpost(self.boreal_station_id, self.log_to_console)
+            yield from self.travel_to_boreal_station_if_not_there()
             yield from self.load_skill_bar()
 
             if not self.pre_run_checks():

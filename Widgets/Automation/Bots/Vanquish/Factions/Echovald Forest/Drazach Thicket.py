@@ -3,6 +3,8 @@ import Py4GW
 import os
 
 BOT_NAME = "VQ Drazach Thicket"
+MODULE_NAME = "Drazach Thicket (Vanquish)"
+MODULE_ICON = "Textures\\Module_Icons\\Vanquish - Drazach Thicket.png"
 TEXTURE = os.path.join(Py4GW.Console.get_projects_path(), "Sources", "ApoSource", "textures", "VQ_Helmet.png")
 OUTPOST_TO_START = 222 #Eternal Grove Outpost
 COORDS_TO_EXIT_OUTPOST = (-7544,14343) #to Drazach Thicket
@@ -106,7 +108,14 @@ def bot_routine(bot: Botting) -> None:
     bot.Party.SetHardMode(True)
     bot.Move.XYAndExitMap(*COORDS_TO_EXIT_OUTPOST,EXPLORABLE_TO_VANQUISH) #Morostav Trail exit to Unwaking Waters
     bot.Wait.ForTime(4000)
+    
+    # Check faction allegiance and get blessing if needed
+    current_luxon = Player.GetLuxonData()[0]
+    current_kurzick = Player.GetKurzickData()[0]
+    
     bot.Move.XYAndInteractNPC(*COORDS_FOR_PRIEST)
+    if current_luxon >= current_kurzick:
+        bot.Multibox.SendDialogToTarget(0x84) # This will bribe the priest in case luxon is greater or equal than kurzick
     bot.Multibox.SendDialogToTarget(DIALOG_FOR_PRIEST) #Get Bounty
     bot.States.AddHeader("Start Combat") #3
     bot.Multibox.UseAllConsumables()

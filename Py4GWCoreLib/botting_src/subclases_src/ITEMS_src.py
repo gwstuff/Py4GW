@@ -26,6 +26,11 @@ class _ITEMS:
         "Uses the AutoLoot Handler to deposit items automatically."
         self._helpers.Items.auto_deposit_items()
 
+    def WithdrawGold(self, target_gold: int = 20000, deposit_all: bool = True):
+        """Ensure the character has exactly target_gold on hand.
+        Deposits excess first (if deposit_all=True), then withdraws the shortfall from storage."""
+        self._helpers.Items.withdraw_gold(target_gold, deposit_all)
+
     def AutoDepositGold(self):
         "Uses the AutoLoot Handler to deposit gold automatically."
         self._helpers.Items.auto_deposit_gold()
@@ -47,11 +52,49 @@ class _ITEMS:
     def Withdraw(self, model_id:int, quantity:int):
         self._helpers.Items.withdraw(model_id, quantity)
 
+    def WithdrawUpTo(self, model_id: int, max_quantity: int):
+        "Withdraw up to max_quantity of model_id from storage. No-op if none available."
+        self._helpers.Items.withdraw_up_to(model_id, max_quantity)
+
+    def WithdrawFirstAvailable(self, model_ids: list, max_quantity: int):
+        "Withdraw up to max_quantity from the first model_id in the list that has stock in storage."
+        self._helpers.Items.withdraw_first_available(model_ids, max_quantity)
+
+    def Deposit(self, model_id: int):
+        "Deposit the first matching item (by model_id) from inventory to storage."
+        self._helpers.Items.deposit_item(model_id)
+
+    def DepositAll(self):
+        "Deposit all items from inventory bags (Backpack, Belt Pouch, Bag 1, Bag 2) to storage."
+        self._helpers.Items.deposit_all_inventory()
+
     def Equip(self, model_id: int):
         self._helpers.Items.equip(model_id)
 
+    def EquipOnHero(self, hero_type, model_id: int):
+        """Equip item (by model_id) on the hero matching hero_type (HeroType enum)."""
+        self._helpers.Items.equip_on_hero(hero_type, model_id)
+
     def Destroy(self, model_id: int):
         self._helpers.Items.destroy(model_id)
+
+    def UseSummoningStone(self):
+        """
+        Uses a summoning stone from inventory with priority:
+        1. Legionnaire Summoning Crystal (always first)
+        2. Igneous Summoning Stone (if player level < 20)
+        3. Any other available summoning stone
+        """
+        self._helpers.Items.use_summoning_stone()
+
+    def UseAllConsumables(self):
+        """
+        Uses all consumables for the current player only (not multibox).
+        Includes: Essence of Celerity, Grail of Might, Armor of Salvation,
+        Birthday Cupcake, Golden Egg, Candy Corn, Candy Apple, Pumpkin Pie,
+        Drake Kabob, Skalefin Soup, Pahnai Salad, and War Supplies.
+        """
+        self._helpers.Items.use_all_consumables()
 
     def DestroyBonusItems(self,
                             exclude_list: List[int] = [ModelID.Igneous_Summoning_Stone.value,
@@ -130,11 +173,62 @@ class _ITEMS:
         def BirthdayCupcake(self):
             self._helpers.Restock.restock_birthday_cupcake()
 
+        def CandyApple(self):
+            self._helpers.Restock.restock_candy_apple()
+
         def Honeycomb(self):
             self._helpers.Restock.restock_honeycomb()
 
         def WarSupplies(self):
             self._helpers.Restock.restock_war_supplies()
+
+        def EssenceOfCelerity(self):
+            self._helpers.Restock.restock_essence_of_celerity()
+
+        def GrailOfMight(self):
+            self._helpers.Restock.restock_grail_of_might()
+
+        def ArmorOfSalvation(self):
+            self._helpers.Restock.restock_armor_of_salvation()
+
+        def GoldenEgg(self):
+            self._helpers.Restock.restock_golden_egg()
+
+        def CandyCorn(self):
+            self._helpers.Restock.restock_candy_corn()
+
+        def SliceOfPumpkinPie(self):
+            self._helpers.Restock.restock_slice_of_pumpkin_pie()
+
+        def DrakeKabob(self):
+            self._helpers.Restock.restock_drake_kabob()
+
+        def BowlOfSkalefinSoup(self):
+            self._helpers.Restock.restock_bowl_of_skalefin_soup()
+
+        def PahnaiSalad(self):
+            self._helpers.Restock.restock_pahnai_salad()
+
+        def AllPcons(self, quantity: int = 250):
+            self._helpers.Restock.force_restock_item(ModelID.Birthday_Cupcake.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Candy_Apple.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Golden_Egg.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Candy_Corn.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Honeycomb.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.War_Supplies.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Slice_Of_Pumpkin_Pie.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Drake_Kabob.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Bowl_Of_Skalefin_Soup.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Pahnai_Salad.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Scroll_Of_Resurrection.value, quantity)
+
+        def Conset(self, quantity: int = 250):
+            self._helpers.Restock.force_restock_item(ModelID.Essence_Of_Celerity.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Grail_Of_Might.value, quantity)
+            self._helpers.Restock.force_restock_item(ModelID.Armor_Of_Salvation.value, quantity)
+
+        def ResurrectionScroll(self, quantity: int = 250):
+            self._helpers.Restock.force_restock_item(ModelID.Scroll_Of_Resurrection.value, quantity)
 
 
 

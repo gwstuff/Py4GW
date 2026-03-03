@@ -6,7 +6,8 @@ import os
 import time
 import random
 
-MODULE_NAME = "HeroHelper"
+MODULE_NAME = "Hero Helper"
+MODULE_ICON = "Textures/Module_Icons/Hero Helper.png"
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 root_directory = Py4GW.Console.get_projects_path()
@@ -76,6 +77,8 @@ class Config:
             "smart_life_bond_enabled",
             "smart_splinter_enabled",
             "smart_vigorous_enabled",
+            "smart_dark_aura_enabled",
+            "smart_healing_enabled",
             "hero_behaviour",
             "last_known_hero_behaviour",
             "conditions",
@@ -84,6 +87,7 @@ class Config:
             "smart_con_cleanse_toggled",
             "smart_hex_cleanse_toggled",
             "smart_interrupt_toggled",
+            "smart_incoming_fallback_enabled",
             "user_hex_input",
             "user_skill_input",
             "floating_window_enabled"
@@ -99,11 +103,14 @@ class Config:
         self.smart_life_bond_enabled = ini_handler.read_bool(MODULE_NAME, "smart_life_bond_enabled", False)
         self.smart_splinter_enabled = ini_handler.read_bool(MODULE_NAME, "smart_splinter_enabled", False)
         self.smart_vigorous_enabled = ini_handler.read_bool(MODULE_NAME, "smart_vigorous_enabled", False)
+        self.smart_dark_aura_enabled = ini_handler.read_bool(MODULE_NAME, "smart_dark_aura_enabled", False)
+        self.smart_healing_enabled = ini_handler.read_bool(MODULE_NAME, "smart_healing_enabled", False)
         self.hero_behaviour = ini_handler.read_int(MODULE_NAME, "hero_behaviour", 0)
         self.last_known_hero_behaviour = ini_handler.read_int(MODULE_NAME, "last_known_hero_behaviour", self.hero_behaviour)
         self.smart_con_cleanse_toggled = ini_handler.read_bool(MODULE_NAME, "smart_con_cleanse_toggled", False)
         self.smart_hex_cleanse_toggled = ini_handler.read_bool(MODULE_NAME, "smart_hex_cleanse_toggled", False)
         self.smart_interrupt_toggled = ini_handler.read_bool(MODULE_NAME, "smart_interrupt_toggled", False)
+        self.smart_incoming_fallback_enabled = ini_handler.read_bool(MODULE_NAME, "smart_incoming_fallback_enabled", False)
         self.floating_window_enabled = ini_handler.read_bool(MODULE_NAME, "floating_window_enabled", False)
         
         self.user_hex_input = ini_handler.read_key(MODULE_NAME, "user_hex_input", "")
@@ -542,9 +549,7 @@ class Helper:
             if not Helper.can_hero_cast_skill(hero_index, skill_id):
                 continue
 
-            skill_name = Skill.GetName(skill_id).replace("_", " ")
-            target_name = Helper.agent_name_cache.get(cast_target_id, str(cast_target_id))
-            Helper.log_event(hero_id, skill_name, target_name, skill_id, cast_target_id)
+            # ...existing code...
 
             return hero_index, hero["skill_slot"], skill_id, cast_target_id
 
@@ -862,6 +867,68 @@ def smart_life_bond():
     if result:
         execute_hero_skill(*result)
 
+def smart_dark_aura():
+    if Party.GetHeroCount() == 0:
+        return
+    if not Helper.can_execute_with_delay("smart_dark_aura", 1000):
+        return
+
+    player_id = Player.GetAgentID()
+    if not Helper.is_agent_alive(player_id):
+        return
+    
+    # Only cast on Necromancer primary players
+    primary, _ = Agent.GetProfessionNames(player_id)
+    if primary != "Necromancer":
+        return
+
+    masochism_id = Skill.GetID("Masochism")
+    dark_aura_id = Skill.GetID("Dark_Aura")
+    
+    # Get heroes with Dark Aura skill
+    heroes_with_dark_aura = Helper.get_heroes_with_skill(dark_aura_id)
+    if not heroes_with_dark_aura:
+        return
+    
+    # Check the first hero with Dark Aura
+    hero_info = heroes_with_dark_aura[0]
+    hero_index = hero_info["hero_index"]
+    hero_id = Party.Heroes.GetHeroAgentIDByPartyPosition(hero_index)
+    
+    if not hero_id or not Helper.is_agent_alive(hero_id):
+        return
+    
+    # Check if the hero has Masochism active on themselves
+    if not Helper.check_for_effects(hero_id, [masochism_id]):
+        # Cast Masochism on the hero itself
+        result = Helper.smartcast_hero_skill(
+            skill_id=masochism_id,
+            min_enemies=0,
+            enemy_range_check=Helper.get_spell_cast_range(),
+            effect_check=True,
+            hero_target=True,  # Cast on the hero itself
+            distance_check_range=Helper.get_spell_cast_range(),
+            allow_out_of_combat=True,
+            min_energy_perc=0.25
+        )
+        if result:
+            execute_hero_skill(*result)
+            return  # Wait for Masochism to be applied before casting Dark Aura
+    
+    # Only cast Dark Aura if Masochism is already active on the hero
+    result = Helper.smartcast_hero_skill(
+        skill_id=dark_aura_id,
+        min_enemies=0,
+        enemy_range_check=Helper.get_spell_cast_range(),
+        effect_check=True,
+        distance_check_range=Helper.get_spell_cast_range(),
+        allow_out_of_combat=True,
+        min_energy_perc=0.25
+    )
+
+    if result:
+        execute_hero_skill(*result)
+
 def smart_st():
     if Party.GetHeroCount() == 0:
         return
@@ -963,6 +1030,125 @@ def smart_bip():
     if result:
         execute_hero_skill(*result)
 
+def smart_healing():
+    if Party.GetHeroCount() == 0:
+        return
+    if not Helper.can_execute_with_delay("smart_healing", 500):
+        return
+
+    # Get allies (party members, heroes, henchmen) - excludes minions
+    ally_array = AgentArray.GetAllyArray()
+    if not ally_array:
+        return
+    
+    # Add pets to ally array
+    pet_array = AgentArray.GetSpiritPetArray()
+    if pet_array:
+        # Filter out spirits, keep only pets
+        pet_array = [agent_id for agent_id in pet_array if not Agent.IsSpawned(agent_id)]
+        ally_array = ally_array + pet_array
+    
+    spell_range = Helper.get_spell_cast_range()
+    player_pos = Player.GetXY()
+    
+    # Filter allies by distance and alive status
+    valid_allies = []
+    for agent_id in ally_array:
+        if not Helper.is_agent_alive(agent_id):
+            continue
+        distance = Utils.Distance(player_pos, Agent.GetXY(agent_id))
+        if distance > spell_range:
+            continue
+        health = Helper.get_hp_data(agent_id)
+        if health.percentage >= 0.90:
+            continue
+        valid_allies.append((agent_id, health.percentage))
+    
+    if not valid_allies:
+        return
+    
+    # Sort by health percentage (lowest first)
+    valid_allies.sort(key=lambda x: x[1])
+    target_id = valid_allies[0][0]
+    
+    # Common monk and ritualist healing skills to try in order of priority
+    healing_skills = [
+        # Monk healing skills
+        "Word_of_Healing",
+        "Patient_Spirit",
+        "Dwaynas_Kiss",
+        "Healing_Burst",
+        "Healing_Touch",
+        "Signet_of_Rejuvenation",
+        "Orison_of_Healing",
+        "Heal_Other",
+        "Healing_Breeze",
+        # Ritualist healing skills
+        "Mend_Body_and_Soul",
+        "Spirit_Light",
+        "Soothing_Memories",
+        "Weapon_of_Remedy",
+        "Vital_Weapon"
+    ]
+    
+    for skill_name in healing_skills:
+        skill_id = Skill.GetID(skill_name)
+        if skill_id == 0:
+            continue
+            
+        # Check if any hero has this skill and can cast it
+        result = Helper.smartcast_hero_skill(
+            skill_id=skill_id,
+            min_enemies=0,
+            enemy_range_check=spell_range,
+            effect_check=False,
+            cast_target_id=target_id,
+            distance_check_range=spell_range + 200,
+            allow_out_of_combat=True,
+            min_energy_perc=0.2
+        )
+        
+        if result:
+            execute_hero_skill(*result)
+            break  # Cast only one heal per cycle
+
+def smart_incoming_fallback():
+    """Force heroes to use Incoming! and Fall Back! regardless of Essence of Celerity being active."""
+    if Party.GetHeroCount() == 0:
+        return
+    if not Helper.can_execute_with_delay("smart_incoming_fallback", 500):
+        return
+
+    player_id = Player.GetAgentID()
+    if not Helper.is_agent_alive(player_id):
+        return
+
+    # Only use these shouts out of combat
+    if Helper.count_enemies_in_range(Helper.get_spell_cast_range(), Player.GetXY()) > 0:
+        return
+
+    incoming_id = Skill.GetID("Incoming")
+    fallback_id = Skill.GetID("Fall_Back")
+
+    # Both shouts are party-wide: if the player already has either one active, no cast needed
+    if Helper.check_for_effects(player_id, [incoming_id, fallback_id]):
+        return
+
+    # Try Incoming first, then Fall Back — whichever a hero has ready
+    for skill_id in [incoming_id, fallback_id]:
+        result = Helper.smartcast_hero_skill(
+            skill_id=skill_id,
+            min_enemies=0,
+            effect_check=False,          # combined check already done above
+            hero_target=True,            # shout is Self-targeting, cast on the hero itself
+            distance_check_range=Helper.get_spell_cast_range() + 200,
+            allow_out_of_combat=True,
+        )
+        if result:
+            execute_hero_skill(*result)
+            return
+
+# Track which hero skills have been disabled
 last_follow_state = None
 last_player_position = None
 follow_toggled_time = 0
@@ -1119,10 +1305,16 @@ def draw_tab_smart_skills(config):
     Helper.create_and_update_checkbox("Smart Strength of Honor", "smart_honor_enabled", tooltip_text="[DISABLE HERO CASTING] Maintains Honor on melee player.")
 
     Helper.create_and_update_checkbox("Smart Life Bond", "smart_life_bond_enabled", tooltip_text="[DISABLE HERO CASTING] Maintains Life Bond on melee player.")
+    PyImGui.same_line(0.0, 60)
+    Helper.create_and_update_checkbox("Smart Dark Aura", "smart_dark_aura_enabled", tooltip_text="Hero maintains Masochism on itself, then Dark Aura on Necromancer player.")
 
     Helper.create_and_update_checkbox("Smart Splinter Weapon", "smart_splinter_enabled", tooltip_text="Casts Splinter on melee player in combat.")
     PyImGui.same_line(0.0, 10)
     Helper.create_and_update_checkbox("Smart Vigorous Spirit", "smart_vigorous_enabled", tooltip_text="Casts Vigorous Spirit on melee player in combat.")
+    
+    Helper.create_and_update_checkbox("Smart Healing", "smart_healing_enabled", tooltip_text="Monk/Rit heals lowest health ally/pet (excludes minions).")
+    PyImGui.same_line(0.0, 10)
+    Helper.create_and_update_checkbox("Smart Incoming/Fall Back", "smart_incoming_fallback_enabled", tooltip_text="Hero uses Incoming! and Fall Back! even when Essence of Celerity is active.")
 
 def draw_tab_condition_cleanse(config):
     if not PyImGui.collapsing_header("Condition Removal", PyImGui.TreeNodeFlags.DefaultOpen):
@@ -1384,6 +1576,7 @@ def draw_options_window():
         ("Smart CC", "smart_con_cleanse_toggled", "Condition Cleanse"),
         ("Smart HR", "smart_hex_cleanse_toggled", "Hex Removal"),
         ("Smart Int", "smart_interrupt_toggled", "Smart Interrupt"),
+        ("Smart I/F", "smart_incoming_fallback_enabled", "Smart Incoming/Fall Back"),
     ])
 
 def draw_window():
@@ -1517,6 +1710,7 @@ def tooltip():
     PyImGui.bullet_text("Condition/Hex Removal: Priority-based cleansing of dangerous debuffs")
     PyImGui.bullet_text("Elite Management: Optimized logic for BiP, Soul Twisting, and SoS")
     PyImGui.bullet_text("Buff Maintenance: Automated upkeep of Splinter Weapon, Honor, and Life Bond")
+    PyImGui.bullet_text("Smart Healing: Ally/Pet healing that excludes minions from targeting")
     PyImGui.bullet_text("Action Queue: Sequential skill execution to prevent animation canceling")
     PyImGui.bullet_text("Status HUD: Embedded window showing real-time hero state and toggles")
 
@@ -1554,12 +1748,18 @@ def main():
                 smart_honor()
             if widget_config.smart_life_bond_enabled:
                 smart_life_bond()
+            if widget_config.smart_dark_aura_enabled:
+                smart_dark_aura()
             if widget_config.smart_st_enabled:   
                 smart_st()
             if widget_config.smart_bip_enabled:
                 smart_bip()   
             if widget_config.smart_sos_enabled:
                 smart_sos()
+            if widget_config.smart_healing_enabled:
+                smart_healing()
+            if widget_config.smart_incoming_fallback_enabled:
+                smart_incoming_fallback()
 
         if widget_config.floating_window_enabled:
             draw_window()

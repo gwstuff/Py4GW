@@ -1,4 +1,5 @@
 import PyPlayer
+import Py4GW
 
 from .enums import *
 from .native_src.internals.helpers import encoded_wstr_to_str
@@ -6,11 +7,45 @@ from .Context import GWContext
 from functools import wraps
 from .native_src.context.AgentContext import AgentStruct
 from .native_src.context.WorldContext import TitleStruct
-from .native_src.methods.PlayerMethods import PlayerMethods
 from .py4gwcorelib_src.ActionQueue import ActionQueueManager
 
 # Player
 class Player:
+    _ACCOUNT_EMAIL_MAX_LEN = 64
+
+    @staticmethod
+    def _hwnd_account_fallback() -> str:
+        """Deterministic ASCII-safe account identifier for unsupported/missing email cases."""
+        try:
+            hwnd = int(Py4GW.Console.get_gw_window_handle() or 0)
+        except Exception:
+            hwnd = 0
+        value = f"{hwnd}@Py4GW"
+        return value[:Player._ACCOUNT_EMAIL_MAX_LEN]
+
+    @staticmethod
+    def _sanitize_account_email_or_fallback(account_email: str | None) -> str:
+        """
+        Normalize account email for shared-memory usage.
+        Falls back to HWND identity for unsupported encodings/non-ASCII accounts.
+        """
+        if not account_email:
+            return Player._hwnd_account_fallback()
+        try:
+            account_email = str(account_email).strip()
+            if not account_email:
+                return Player._hwnd_account_fallback()
+
+            # Some account strings (e.g. unsupported locale/corrupt decode cases) are not safe
+            # for downstream paths; collapse them to HWND identity.
+            account_email.encode("ascii")
+
+            if len(account_email) > Player._ACCOUNT_EMAIL_MAX_LEN:
+                account_email = account_email[:Player._ACCOUNT_EMAIL_MAX_LEN]
+            return account_email
+        except Exception:
+            return Player._hwnd_account_fallback()
+
     @staticmethod
     def _format_uuid_as_email(player_uuid) -> str:
         if not player_uuid:
@@ -42,6 +77,30 @@ class Player:
         if (char_ctx := GWContext.Char.GetContext()) is None:
             return None
         return char_ctx.player_number
+    
+    @staticmethod
+    def GetLoginNumber() -> int:
+        from .Party import Party
+        players = Party.GetPlayers()
+        agent_id = Player.GetAgentID() if Player.IsPlayerLoaded() else 0
+        if len(players) > 0:
+            for player in players:
+                Pagent_id = Party.Players.GetAgentIDByLoginNumber(player.login_number)
+                if agent_id == Pagent_id:
+                    return player.login_number
+        return 0   
+    
+    @staticmethod
+    def GetPartyNumber() -> int:
+        from .Party import Party
+        login_number = Player.GetLoginNumber()
+        players = Party.GetPlayers()
+
+        for index, player in enumerate(players):
+            if player.login_number == login_number:
+                return index
+
+        return -1
     
     @staticmethod
     def IsPlayerLoaded() -> bool:
@@ -200,16 +259,16 @@ class Player:
             
             if (char_ctx := GWContext.Char.GetContext()) is None:
                 return ""
-            account_email = char_ctx.player_email_str
+            try:
+                account_email = char_ctx.player_email_str
+            except Exception:
+                return Player._hwnd_account_fallback()
+            account_email = Player._sanitize_account_email_or_fallback(account_email)
             if account_email:
                 return account_email
-            player_uuid = Player.GetPlayerUUID()
-            if all(part == 0 for part in player_uuid):
-                return ""
-            #return Player._format_uuid_as_email(player_uuid)
-            return "steam_account"  # Placeholder for Steam accounts
+            return Player._hwnd_account_fallback()
         except Exception:
-            return ""
+            return Player._hwnd_account_fallback()
     
     @staticmethod
     def GetPlayerUUID() -> tuple[int, int, int, int]:
@@ -491,10 +550,6 @@ class Player:
         """
         if (world_ctx := GWContext.World.GetContext()) is None:
             return []
-        if (player_number := Player.GetPlayerNumber()) is None:
-            return []
-        if (player := world_ctx.GetPlayerById(player_number)) is None:
-            return []
         if (titles := world_ctx.titles) is None:
             return []
         return titles
@@ -574,6 +629,7 @@ class Player:
             y (float): Y coordinate.
         Returns: None
         """
+        from .native_src.methods.PlayerMethods import PlayerMethods
         ActionQueueManager().AddAction("ACTION",
         PlayerMethods.Move, x, y, zPlane)
         
@@ -585,6 +641,7 @@ class Player:
             faction_id (int): 0= Kurzick, 1= Luxon
         Returns: None
         """
+        from .native_src.methods.PlayerMethods import PlayerMethods
         ActionQueueManager().AddAction("ACTION",
         PlayerMethods.DepositFaction,faction_id)
 
@@ -595,6 +652,7 @@ class Player:
         Args: None
         Returns: None
         """
+        from .native_src.methods.PlayerMethods import PlayerMethods
         ActionQueueManager().AddAction("ACTION",
         PlayerMethods.RemoveActiveTitle)
         
@@ -606,9 +664,25 @@ class Player:
             title_id (int): The ID of the title to set.
         Returns: None
         """
+        from .native_src.methods.PlayerMethods import PlayerMethods
         ActionQueueManager().AddAction("ACTION",
         PlayerMethods.SetActiveTitle,title_id)
-        
+    
+    @staticmethod
+    def SendRawDialog(dialog_id: int):
+        """Send dialog using kSendAgentDialog. Works for NPC dialogs, skill trainers, etc."""
+        from .native_src.methods.PlayerMethods import PlayerMethods
+
+        ActionQueueManager().AddAction("ACTION",
+        PlayerMethods.SendRawDialog, dialog_id)
+
+    @staticmethod
+    def BuySkill(skill_id: int):
+        """Buy/Learn a skill from a Skill Trainer."""
+        from .native_src.methods.PlayerMethods import PlayerMethods
+
+        ActionQueueManager().AddAction("ACTION",
+        PlayerMethods.SendSkillTrainerDialog, skill_id)
         
     
     #region Not Worked

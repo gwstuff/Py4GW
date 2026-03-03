@@ -9,11 +9,11 @@ from Py4GWCoreLib.Agent import Agent
 from Py4GWCoreLib.Player import Player
 from Py4GWCoreLib.enums import SharedCommandType
 from Py4GWCoreLib.enums_src.GameData_enums import ProfessionShort, ProfessionShort_Names
+from Sources.oazix.CustomBehaviors.PathLocator import PathLocator
 from Sources.oazix.CustomBehaviors.primitives.behavior_state import BehaviorState
 from Sources.oazix.CustomBehaviors.primitives import constants
 from Sources.oazix.CustomBehaviors.primitives.custom_behavior_loader import CustomBehaviorLoader
 from Sources.oazix.CustomBehaviors.primitives.helpers import custom_behavior_helpers, custom_behavior_helpers_party
-from Sources.oazix.CustomBehaviors.primitives.hero_ai_wrapping.hero_ai_wrapping import HeroAiWrapping
 from Sources.oazix.CustomBehaviors.primitives.parties.custom_behavior_party import CustomBehaviorParty
 from Sources.oazix.CustomBehaviors.primitives.parties.custom_behavior_shared_memory import CustomBehaviorWidgetMemoryManager
 from Sources.oazix.CustomBehaviors.primitives.parties.party_command_contants import PartyCommandConstants
@@ -23,16 +23,11 @@ from Sources.oazix.CustomBehaviors.primitives.skills.utility_skill_typology_colo
 from Sources.oazix.CustomBehaviors.gui.flags import FlagsUI
 from Sources.oazix.CustomBehaviors.gui.expandable_section import ExpandableSection
 
-
-script_directory = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.abspath(os.path.join(script_directory, os.pardir))
-py4gw_root_directory = project_root + f"\\..\\..\\"
-
 # Create expandable sections for different UI panels
 inventory_expandable = ExpandableSection(initially_expanded=False)
 flag_expandable = ExpandableSection(initially_expanded=False)
 following_expandable = ExpandableSection(initially_expanded=False)
-
+project_root = PathLocator.get_custom_behaviors_root_directory()
 
 def draw_party_target_vertical_line() -> None:
     """Draw a vertical indicator for the Party Custom Target only:
@@ -249,14 +244,10 @@ def render():
         PyImGui.pop_style_var(1)
         PyImGui.pop_style_color(1)
         if PyImGui.is_item_hovered():
-            PyImGui.set_tooltip("Preset 1 (Grid): Update flag positions based on leader's position and facing; auto-assign if none")
+            PyImGui.set_tooltip("Apply grid assignments to flag positions based on leader's position and facing")
 
         if clicked_p1:
-            flag_manager.auto_assign_emails_if_none_assigned()
-            leader_x, leader_y = Player.GetXY()
-            leader_agent_id = Player.GetAgentID()
-            leader_angle = Agent.GetRotationAngle(leader_agent_id)
-            flag_manager.update_formation_positions(leader_x, leader_y, leader_angle, "preset_1")
+            FlagsUI.apply_grid_to_flag_manager()
 
         # Toggle expand/collapse using the generic ExpandableSection
         flag_expandable.render_expand_toggle("", "expand_flagging_top")
@@ -345,11 +336,11 @@ def render():
                     if account.AccountEmail == account_email:
                         continue
                     total_count += 1
-                    is_in_map = (self_account.MapID == account.MapID and self_account.MapRegion == account.MapRegion and self_account.MapDistrict == account.MapDistrict)
+                    is_in_map = (self_account.AgentData.Map.MapID == account.AgentData.Map.MapID and self_account.AgentData.Map.Region == account.AgentData.Map.Region and self_account.AgentData.Map.District == account.AgentData.Map.District)
                     if is_in_map :
-                        ImGui.show_tooltip(f"{account.CharacterName} - In the current map")
+                        ImGui.show_tooltip(f"{account.AgentData.CharacterName} - In the current map")
                         count_in_map+=1
-                    else : ImGui.show_tooltip(f"{account.CharacterName} - In {Map.GetMapName(account.MapID)}")
+                    else : ImGui.show_tooltip(f"{account.AgentData.CharacterName} - In {Map.GetMapName(account.AgentData.Map.MapID)}")
 
             ImGui.show_tooltip(f"----------------------------")
             ImGui.show_tooltip(f"{count_in_map}/{total_count} in current map")
@@ -383,18 +374,18 @@ def render():
                 for account in accounts:
                     if account.AccountEmail == account_email:
                         continue
-                    is_in_map = (self_account.MapID == account.MapID and self_account.MapRegion == account.MapRegion and self_account.MapDistrict == account.MapDistrict)
+                    is_in_map = (self_account.AgentData.Map.MapID == account.AgentData.Map.MapID and self_account.AgentData.Map.Region == account.AgentData.Map.Region and self_account.AgentData.Map.District == account.AgentData.Map.District)
                     if is_in_map:
-                        ImGui.show_tooltip(f"{account.CharacterName} - In the current map")
+                        ImGui.show_tooltip(f"{account.AgentData.CharacterName} - In the current map")
 
                 ImGui.show_tooltip(f"--------------Not eligible--------------")
 
                 for account in accounts:
                     if account.AccountEmail == account_email:
                         continue
-                    is_in_map = (self_account.MapID == account.MapID and self_account.MapRegion == account.MapRegion and self_account.MapDistrict == account.MapDistrict)
+                    is_in_map = (self_account.AgentData.Map.MapID == account.AgentData.Map.MapID and self_account.AgentData.Map.Region == account.AgentData.Map.Region and self_account.AgentData.Map.District == account.AgentData.Map.District)
                     if not is_in_map:
-                        ImGui.show_tooltip(f"{account.CharacterName} - Not eligible (not in the current map)")
+                        ImGui.show_tooltip(f"{account.AgentData.CharacterName} - Not eligible (not in the current map)")
 
             PyImGui.same_line(0, 5)
 
@@ -546,7 +537,7 @@ def render():
 
     PyImGui.separator()
 
-    if not custom_behavior_helpers.CustomBehaviorHelperParty.is_party_leader():
+    if custom_behavior_helpers.CustomBehaviorHelperParty.is_party_leader():
         if PyImGui.tree_node_ex("[TEAM UI] HeroAI UI :", 0):
 
             from Sources.oazix.CustomBehaviors.primitives.hero_ai_wrapping.hero_ai_wrapping import HeroAiWrapping
@@ -566,7 +557,7 @@ def render():
                 CustomBehaviorParty().set_party_leader_email(None)
 
             # if CustomBehaviorParty.get_party_leader_email() is not None:
-            #     PyImGui.text(f"CharacterName {GLOBAL_CACHE.ShMem.GetAccountDataFromEmail()).CharacterName}")
+            #     PyImGui.text(f"CharacterName {GLOBAL_CACHE.ShMem.GetAccountDataFromEmail()).AgentData.CharacterName}")
 
             # Table listing all players from shared memory
             account_email = Player.GetAccountEmail()
@@ -582,11 +573,11 @@ def render():
 
                     for account in accounts:
 
-                        character_name = account.CharacterName if account.CharacterName else "Unknown"
+                        character_name = account.AgentData.CharacterName if account.AgentData.CharacterName else "Unknown"
 
                         # Get profession short names (e.g., "Me/Mo")
-                        primary_prof_id = account.PlayerProfession[0] if account.PlayerProfession else 0
-                        secondary_prof_id = account.PlayerProfession[1] if account.PlayerProfession else 0
+                        primary_prof_id = account.AgentData.Profession[0] if account.AgentData.Profession else 0
+                        secondary_prof_id = account.AgentData.Profession[1] if account.AgentData.Profession else 0
                         primary_short = ProfessionShort_Names.get(ProfessionShort(primary_prof_id), "?") if primary_prof_id > 0 else "?"
                         secondary_short = ProfessionShort_Names.get(ProfessionShort(secondary_prof_id), "") if secondary_prof_id > 0 else ""
                         class_text = f"{primary_short}/{secondary_short}" if secondary_short else primary_short
@@ -605,7 +596,7 @@ def render():
                         PyImGui.text(f"[{class_text}] {character_name}")
 
                         PyImGui.table_next_column()
-                        PyImGui.text(f"{account.PartyID} / AgentId {account.PlayerID} / PartyLeader {GLOBAL_CACHE.Party.GetPartyLeaderID()}")
+                        PyImGui.text(f"{account.AgentPartyData.PartyID} / AgentId {account.AgentData.AgentID} / PartyLeader {GLOBAL_CACHE.Party.GetPartyLeaderID()}")
 
                         PyImGui.table_next_column()
                         if PyImGui.button(f"Focus window##{account.AccountEmail}"):

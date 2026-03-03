@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from HeroAI.party_cache import PartyCache
-from Py4GWCoreLib.GlobalCache.SharedMemory import SHMEM_NUMBER_OF_SKILLS, AccountData, HeroAIOptionStruct
+from Py4GWCoreLib.GlobalCache.SharedMemory import SHMEM_MAX_NUMBER_OF_SKILLS, AccountStruct, HeroAIOptionStruct
 
 from .constants import SHARED_MEMORY_FILE_NAME, STAY_ALERT_TIME, MAX_NUM_PLAYERS, NUMBER_OF_SKILLS
 from .globals import HeroAI_varsClass, HeroAI_Window_varsClass
@@ -13,6 +13,7 @@ from Py4GWCoreLib.IniManager import IniManager
 
 INI_DIR = "HeroAI"
 MAIN_WINDOW_INI = "main_window.ini"
+CONSUMABLES_WINDOW_INI = "consumables_window.ini"
 
 @dataclass
 class GameData:
@@ -135,10 +136,11 @@ class CacheData:
         if not self._initialized:
             self.account_email = ""
             self.ini_key : str = ""
+            self.consumables_ini_key : str = ""
             
             self.party_position : int = -1
             self.party : PartyCache = PartyCache()
-            self.account_data : AccountData = AccountData()
+            self.account_data : AccountStruct = AccountStruct()
             self.account_options : HeroAIOptionStruct = HeroAIOptionStruct()
             
             self.combat_handler = CombatClass()
@@ -160,12 +162,12 @@ class CacheData:
             self.draw_floating_loot_buttons = False
             self.reset()
             self.ui_state_data = UIStateData()
-            self.follow_throttle_timer = ThrottledTimer(1000)
+            self.follow_throttle_timer = ThrottledTimer(300)
             self.follow_throttle_timer.Start()
             self.option_show_floating_targets = True
             self.global_options = HeroAIOptionStruct()
             
-            for i in range(SHMEM_NUMBER_OF_SKILLS):
+            for i in range(SHMEM_MAX_NUMBER_OF_SKILLS):
                 self.global_options.Skills[i] = True
                 
             self.global_options.Following = True
@@ -193,9 +195,13 @@ class CacheData:
             if not self.ini_key:
                 self.ini_key = IniManager().ensure_key(f"{INI_DIR}/", MAIN_WINDOW_INI)
                 
-            if not self.ini_key:
-                return
+            if not self.consumables_ini_key:
+                self.consumables_ini_key = IniManager().ensure_key(f"{INI_DIR}/", CONSUMABLES_WINDOW_INI)
                 
+            if not self.ini_key or not self.consumables_ini_key:
+                return
+            
+
             if self.game_throttle_timer.HasElapsed(self.game_throttle_time):
                 self.game_throttle_timer.Reset()
                 self.account_email = Player.GetAccountEmail()
@@ -206,7 +212,7 @@ class CacheData:
                 self.party.update()
                 
                 self.account_data = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(self.account_email) or self.account_data
-                self.account_options = GLOBAL_CACHE.ShMem.GetHeroAIOptions(self.account_email) or self.account_options
+                self.account_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(self.account_email) or self.account_options
                 
                 if self.stay_alert_timer.HasElapsed(STAY_ALERT_TIME):
                     self.data.in_aggro = self.InAggro(AgentArray.GetEnemyArray(), Range.Earshot.value)

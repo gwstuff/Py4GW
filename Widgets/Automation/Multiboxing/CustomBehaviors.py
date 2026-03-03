@@ -37,6 +37,7 @@ from Sources.oazix.CustomBehaviors.gui.debug_skillbars import render as debug_sk
 from Sources.oazix.CustomBehaviors.gui.debug_execution import render as debug_execution
 from Sources.oazix.CustomBehaviors.gui.debug_sharedlocks import render as debug_sharedlocks
 from Sources.oazix.CustomBehaviors.gui.debug_eventbus import render as debug_eventbus
+from Sources.oazix.CustomBehaviors.gui.debug_eval_profiler import render as debug_eval_profiler
 from Sources.oazix.CustomBehaviors.gui.auto_mover import render as auto_mover
 from Sources.oazix.CustomBehaviors.gui.teambuild import render as teambuild
 from Sources.oazix.CustomBehaviors.gui.botting import render as botting
@@ -48,6 +49,9 @@ widget_monitor = WidgetMonitor()
 # print(f"current_path is : {current_path}")
 widget_window_size:tuple[float, float] = (0,0)
 widget_window_pos:tuple[float, float] = (0,0)
+
+MODULE_NAME = "Custom Behaviors: Utility AI"
+MODULE_ICON = "Textures/Module_Icons/Custom Behaviors.png"
 
 def gui():
     # PyImGui.set_next_window_size(260, 650)
@@ -105,6 +109,10 @@ def gui():
                 if PyImGui.begin_tab_item("debug_loader"):
                     PyImGui.text(f"History (newest on top) : ")
                     debug_skilbars()
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item("debug_profiler"):
+                    debug_eval_profiler()
                     PyImGui.end_tab_item()
 
                 PyImGui.end_tab_bar()

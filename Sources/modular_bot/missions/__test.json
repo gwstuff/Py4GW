@@ -1,0 +1,6 @@
+{
+  "name": "darkrime delves",
+  "steps": [
+    {"type": "auto_path", "name": "To dungeon", "points": [[-14428, 13586]]}
+  ]
+}

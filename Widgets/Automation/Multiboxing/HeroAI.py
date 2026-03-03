@@ -1,12 +1,15 @@
 #region Imports
 import math
+import random
 import sys
 import traceback
 import Py4GW
+import PyImGui
 
 from Py4GWCoreLib.py4gwcorelib_src.Console import ConsoleLog
 
 MODULE_NAME = "HeroAI"
+MODULE_ICON = "Textures/Module_Icons/HeroAI.png"
 
 from Py4GWCoreLib.Map import Map
 from Py4GWCoreLib.Player import Player
@@ -28,6 +31,52 @@ LOOT_THROTTLE_CHECK = ThrottledTimer(250)
 
 cached_data = CacheData()
 map_quads : list[Map.Pathing.Quad] = []
+#region Looting
+def LootingNode(cached_data: CacheData)-> BehaviorTree.NodeState:
+    options = cached_data.account_options
+    if not options or not options.Looting:
+        return BehaviorTree.NodeState.FAILURE
+    
+    if cached_data.data.in_aggro:
+        return BehaviorTree.NodeState.FAILURE
+    
+    
+    account_email = Player.GetAccountEmail()
+    index, message = GLOBAL_CACHE.ShMem.PreviewNextMessage(account_email)
+
+    if index != -1 and message and message.Command == SharedCommandType.PickUpLoot:
+        if LOOT_THROTTLE_CHECK.IsExpired():
+            return BehaviorTree.NodeState.FAILURE
+        return BehaviorTree.NodeState.RUNNING
+    
+    if GLOBAL_CACHE.Inventory.GetFreeSlotCount() <= 1:
+        return BehaviorTree.NodeState.FAILURE
+    
+    loot_array = LootConfig().GetfilteredLootArray(
+        Range.Earshot.value,
+        multibox_loot=True,
+        allow_unasigned_loot=False,
+    )
+
+    if len(loot_array) == 0:
+        return BehaviorTree.NodeState.FAILURE
+
+    self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(account_email)
+    if self_account:
+        GLOBAL_CACHE.ShMem.SendMessage(
+            self_account.AccountEmail,
+            self_account.AccountEmail,
+            SharedCommandType.PickUpLoot,
+            (0, 0, 0, 0),
+        )
+        LOOT_THROTTLE_CHECK.Reset()
+        # Return RUNNING so the tree knows the task started
+        return BehaviorTree.NodeState.RUNNING
+
+    return BehaviorTree.NodeState.FAILURE
+
+
+
 
 #region Combat
 def HandleOutOfCombat(cached_data: CacheData):
@@ -44,15 +93,15 @@ def HandleCombatFlagging(cached_data: CacheData):
     # Suspends all activity until HeroAI has made it to the flagged position
     # Still goes into combat as long as its within the combat follow range value of the expected flag
     party_number = GLOBAL_CACHE.Party.GetOwnPartyNumber()
-    own_options = GLOBAL_CACHE.ShMem.GetGerHeroAIOptionsByPartyNumber(party_number)
-    leader_options = GLOBAL_CACHE.ShMem.GetGerHeroAIOptionsByPartyNumber(0)
+    own_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsByPartyNumber(party_number)
+    leader_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsByPartyNumber(0)
     
     if not own_options:
         return False    
 
     if own_options.IsFlagged:
-        own_follow_x = own_options.FlagPosX
-        own_follow_y = own_options.FlagPosY
+        own_follow_x = own_options.FlagPos.x
+        own_follow_y = own_options.FlagPos.y
         own_flag_coords = (own_follow_x, own_follow_y)
         if (
             Utils.Distance(own_flag_coords, Agent.GetXY(Player.GetAgentID()))
@@ -60,8 +109,8 @@ def HandleCombatFlagging(cached_data: CacheData):
         ):
             return True  # Forces a reset on autoattack timer
     elif leader_options and leader_options.IsFlagged:
-        leader_follow_x = leader_options.FlagPosX
-        leader_follow_y = leader_options.FlagPosY
+        leader_follow_x = leader_options.AllFlag.x
+        leader_follow_y = leader_options.AllFlag.y
         leader_flag_coords = (leader_follow_x, leader_follow_y)
         if (
             Utils.Distance(leader_flag_coords, Agent.GetXY(Player.GetAgentID()))
@@ -119,178 +168,81 @@ def HandleAutoAttack(cached_data: CacheData) -> bool:
     return False
 
 
-cached_data.in_looting_routine = False
-
-#region Looting
-def LootingRoutineActive():
-    account_email = Player.GetAccountEmail()
-    index, message = GLOBAL_CACHE.ShMem.PreviewNextMessage(account_email)
-
-    if index == -1 or message is None:
-        return False
-
-    if message.Command != SharedCommandType.PickUpLoot:
-        return False
-    return True
-
-
-def Loot(cached_data: CacheData):
-    global LOOT_THROTTLE_CHECK
-    options = cached_data.account_options
-
-    if not options or not options.Looting:
-        return False
-
-    if cached_data.data.in_aggro:
-        return False
-
-    if LootingRoutineActive():
-        return True
-
-    if not LOOT_THROTTLE_CHECK.IsExpired():
-        cached_data.in_looting_routine = True
-        return True
-
-    # Stop if inventory is full
-    if GLOBAL_CACHE.Inventory.GetFreeSlotCount() < 1:
-        return False
-
-    # Build the loot array based on filtering rules
-    
-    loot_array = LootConfig().GetfilteredLootArray(
-        Range.Earshot.value,
-        multibox_loot=True,
-        allow_unasigned_loot=False,
-    )
-    if len(loot_array) == 0:
-        cached_data.in_looting_routine = False
-        return False
-
-    cached_data.in_looting_routine = True
-    self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
-    if not self_account:
-        cached_data.in_looting_routine = False
-        return False
-
-    # === Throttled Send ===
-    if LOOT_THROTTLE_CHECK.IsExpired():
-        GLOBAL_CACHE.ShMem.SendMessage(
-            self_account.AccountEmail,
-            self_account.AccountEmail,
-            SharedCommandType.PickUpLoot,
-            (0, 0, 0, 0),
-        )
-        LOOT_THROTTLE_CHECK.Reset()
-
-    return True
-
-
-following_flag = False
-
 
 #region Following
-def Follow(cached_data: CacheData):
-    global FOLLOW_DISTANCE_ON_COMBAT, following_flag, map_quads
+following_flag = False
+last_follow_move_point: tuple[float, float] | None = None
+follow_map_entry_signature: tuple[int, int, int, int] | None = None
+follow_require_front_after_map_entry = False
+def Follow(cached_data: CacheData) -> BehaviorTree.NodeState:
+    global last_follow_move_point, follow_map_entry_signature, follow_require_front_after_map_entry
     
     options = cached_data.account_options
     if not options or not options.Following:  # halt operation if following is disabled
-        return False
+        return BehaviorTree.NodeState.FAILURE
     
     if not cached_data.follow_throttle_timer.IsExpired():
-        return False
-
-    if not map_quads:
-        map_quads = Map.Pathing.GetMapQuads()
-
-        
+        return BehaviorTree.NodeState.FAILURE
 
     if Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID():
         cached_data.follow_throttle_timer.Reset()
-        return False
+        return BehaviorTree.NodeState.FAILURE
 
-    party_number = GLOBAL_CACHE.Party.GetOwnPartyNumber()
-    leader_options = GLOBAL_CACHE.ShMem.GetGerHeroAIOptionsByPartyNumber(0)
-        
-    follow_x = 0.0
-    follow_y = 0.0
-    follow_angle = -1.0
+    map_sig = (
+        int(Map.GetMapID()),
+        int(Map.GetRegion()[0]),
+        int(Map.GetDistrict()),
+        int(Map.GetLanguage()[0]),
+    )
+    if follow_map_entry_signature != map_sig:
+        follow_map_entry_signature = map_sig
+        follow_require_front_after_map_entry = True
+        last_follow_move_point = None
 
-    if options.IsFlagged:  # my own flag
-        follow_x = options.FlagPosX
-        follow_y = options.FlagPosY
-        follow_angle = options.FlagFacingAngle
-        following_flag = True
-        
-    elif leader_options and leader_options.IsFlagged:  # leader's flag
-        follow_x = leader_options.FlagPosX
-        follow_y = leader_options.FlagPosY
-        follow_angle = leader_options.FlagFacingAngle
-        following_flag = False
-        
-    else:  # follow leader
-        following_flag = False
-        follow_x, follow_y = Agent.GetXY(GLOBAL_CACHE.Party.GetPartyLeaderID())
-        follow_angle = Agent.GetRotationAngle(GLOBAL_CACHE.Party.GetPartyLeaderID())
-
-    if following_flag:
-        FOLLOW_DISTANCE_ON_COMBAT = FOLLOW_COMBAT_DISTANCE
-    elif Agent.IsMelee(Player.GetAgentID()):
-        FOLLOW_DISTANCE_ON_COMBAT = MELEE_RANGE_VALUE
-    else:
-        FOLLOW_DISTANCE_ON_COMBAT = RANGED_RANGE_VALUE
-
+    follow_x = float(options.FollowPos.x)
+    follow_y = float(options.FollowPos.y)
+    follow_z = int(float(getattr(options.FollowPos, "z", 0.0)))
     if cached_data.data.in_aggro:
-        follow_distance = FOLLOW_DISTANCE_ON_COMBAT
+        combat_threshold_raw = float(getattr(options, "FollowMoveThresholdCombat", -1.0))
+        if combat_threshold_raw >= 0.0:
+            follow_distance = max(0.0, combat_threshold_raw)
+        else:
+            follow_distance = max(0.0, float(getattr(options, "FollowMoveThreshold", 0.0)))
     else:
-        follow_distance = FOLLOW_DISTANCE_OUT_OF_COMBAT if not following_flag else 0.0
+        follow_distance = max(0.0, float(getattr(options, "FollowMoveThreshold", 0.0)))
+    if Utils.Distance((follow_x, follow_y), Player.GetXY()) <= follow_distance:
+        # Inside threshold: do not let follow preempt OOC/combat logic.
+        return BehaviorTree.NodeState.FAILURE
 
-    angle_changed_pass = False
-    if cached_data.data.angle_changed and (not cached_data.data.in_aggro):
-        angle_changed_pass = True
+    if follow_require_front_after_map_entry:
+        px, py = Player.GetXY()
+        dx = follow_x - px
+        dy = follow_y - py
+        if abs(dx) > 0.001 or abs(dy) > 0.001:
+            facing = Agent.GetRotationAngle(Player.GetAgentID())
+            if ((dx * math.cos(facing)) + (dy * math.sin(facing))) <= 0.0:
+                return BehaviorTree.NodeState.FAILURE
 
-    close_distance_check = DistanceFromWaypoint(follow_x, follow_y) <= follow_distance
+    xx = follow_x
+    yy = follow_y
+    if last_follow_move_point is not None:
+        last_x, last_y = last_follow_move_point
+        if abs(xx - last_x) <= 0.0001 and abs(yy - last_y) <= 0.0001:
+            xx += random.uniform(-5.0, 5.0)
+            yy += random.uniform(-5.0, 5.0)
 
-    if not angle_changed_pass and close_distance_check:
-        return False
-
-    hero_grid_pos = party_number + GLOBAL_CACHE.Party.GetHeroCount() + GLOBAL_CACHE.Party.GetHenchmanCount()
-    angle_on_hero_grid = follow_angle + Utils.DegToRad(hero_formation[hero_grid_pos])
-
-    def is_position_on_map(x, y) -> bool:
-        if not HeroAI_FloatingWindows.settings.ConfirmFollowPoint:
-            return True
-        
-        for quad in map_quads:    
-            if Map.Pathing._point_in_quad(x, y, quad):
-                return True
-            
-        return False
-    
-    if following_flag:
-        xx = follow_x
-        yy = follow_y
-    else:
-        xx = Range.Touch.value * math.cos(angle_on_hero_grid) + follow_x
-        yy = Range.Touch.value * math.sin(angle_on_hero_grid) + follow_y
-            
-        if not is_position_on_map(xx, yy):
-            ## fallback to direct follow if calculated point is off-map to avoid getting stuck or falling behind
-            xx = follow_x
-            yy = follow_y
-    
-    point_zero = (0.0, 0.0)
-    if Utils.Distance((follow_x, follow_y), point_zero) <= 5:
-        ConsoleLog(MODULE_NAME, "Follow: Target position too close to point zero, skipping move.", Py4GW.Console.MessageType.Warning)
-        return False
-    
-    if not Agent.IsValid(GLOBAL_CACHE.Party.GetPartyLeaderID()):
-        ConsoleLog(MODULE_NAME, "Follow: Party leader agent is not valid, cannot follow.", Py4GW.Console.MessageType.Warning)
-        return False
-    
-    cached_data.data.angle_changed = False
     ActionQueueManager().ResetQueue("ACTION")
+    #Player.Move(xx, yy, follow_z)
     Player.Move(xx, yy)
-    return True
+
+    last_follow_move_point = (xx, yy)
+    follow_require_front_after_map_entry = False
+    cached_data.follow_throttle_timer.Reset()
+    # In combat and out of range: fleeing/repositioning should preempt combat for this tick.
+    if cached_data.data.in_aggro:
+        return BehaviorTree.NodeState.SUCCESS
+    # Out of combat: keep follow non-blocking so OOC behavior can still run freely.
+    return BehaviorTree.NodeState.FAILURE
 
 show_debug = False
 
@@ -380,6 +332,29 @@ def initialize(cached_data: CacheData) -> bool:
     
     return False"""
 
+def IsUserInterrupting() -> bool:
+    from Py4GWCoreLib.enums_src.IO_enums import Key
+    io = PyImGui.get_io()
+    
+    if io.want_capture_keyboard or io.want_capture_mouse:
+        return False
+    
+    movement_keys = [
+        Key.W.value, Key.A.value, Key.S.value, Key.D.value,
+        Key.Q.value, Key.E.value, Key.Z.value, Key.R.value,
+        Key.UpArrow.value, Key.DownArrow.value, 
+        Key.LeftArrow.value, Key.RightArrow.value
+    ]
+    
+    for vk in movement_keys:
+        if PyImGui.is_key_down(vk):
+            return True
+
+    if (PyImGui.is_mouse_down(0) and PyImGui.is_mouse_down(1)) or PyImGui.is_mouse_down(2):
+        return True
+
+    return False
+    
     
 GlobalGuardNode = BehaviorTree.SequenceNode(
     name="GlobalGuard",
@@ -401,6 +376,11 @@ GlobalGuardNode = BehaviorTree.SequenceNode(
             name="NotKnockedDown",
             condition_fn=lambda:
                 not Agent.IsKnockedDown(Player.GetAgentID())
+        ),
+        
+        BehaviorTree.ConditionNode(
+            name="NotUserInterrupting",
+            condition_fn=lambda: not IsUserInterrupting()
         ),
     ],
 )
@@ -434,12 +414,8 @@ HeroAI_BT = BehaviorTree.SequenceNode(name="HeroAI_Main_BT",
         BehaviorTree.SelectorNode(name="UpdateStatusSelector",
             children=[
                 # Looting routine already active (allowed anytime)
-                BehaviorTree.ActionNode(name="LootingRoutineActive",
-                    action_fn=lambda: (
-                        BehaviorTree.NodeState.RUNNING
-                        if LootingRoutineActive()
-                        else BehaviorTree.NodeState.FAILURE
-                    ),
+                BehaviorTree.ActionNode(name="LootingRoutine",
+                    action_fn=lambda: LootingNode(cached_data),
                 ),
 
                 # Out-of-combat behavior (allowed while moving)
@@ -458,25 +434,10 @@ HeroAI_BT = BehaviorTree.SequenceNode(name="HeroAI_Main_BT",
                     action_fn=lambda: movement_interrupt(),
                 ),
 
-                # Loot
-                BehaviorTree.ActionNode(
-                    name="Loot",
-                    action_fn=lambda: (
-                        BehaviorTree.NodeState.SUCCESS
-                        if Loot(cached_data)
-                        else BehaviorTree.NodeState.FAILURE
-                    ),
-                ),
-
                 # Follow
                 BehaviorTree.ActionNode(
                     name="Follow",
-                    action_fn=lambda: (
-                        cached_data.follow_throttle_timer.Reset()
-                        or BehaviorTree.NodeState.SUCCESS
-                        if Follow(cached_data)
-                        else BehaviorTree.NodeState.FAILURE
-                    ),
+                    action_fn=lambda: Follow(cached_data),
                 ),
 
                 # Combat
@@ -570,7 +531,6 @@ def main():
         handle_UI(cached_data)  
         
         if initialize(cached_data):
-            # UpdateStatus(cached_data)
             HeroAI_BT.tick()
             pass
         else:

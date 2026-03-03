@@ -2,6 +2,8 @@ from Py4GWCoreLib import Botting, Routines, GLOBAL_CACHE, ModelID, Map, Agent, C
 import Py4GW
 import os
 BOT_NAME = "VQ Mount Qinkai"
+MODULE_NAME = "Mount Qinkai (Vanquish)"
+MODULE_ICON = "Textures\\Module_Icons\\Vanquish - Mount Qinkai.png"
 TEXTURE = os.path.join(Py4GW.Console.get_projects_path(), "Sources", "ApoSource", "textures", "VQ_Helmet.png")
 OUTPOST_TO_TRAVEL = 389 # Mount Qinkai outpost
 CAVALON= 193 # Cavalon for faction donation
@@ -72,7 +74,14 @@ def bot_routine(bot: Botting) -> None:
     bot.Party.SetHardMode(True)
     bot.Move.XYAndExitMap(-5490, 13672, 200) # Mount Qinkai
     bot.Wait.ForTime(4000)
+    
+    # Check faction allegiance and get blessing if needed
+    current_luxon = Player.GetLuxonData()[0]
+    current_kurzick = Player.GetKurzickData()[0]
+    
     bot.Move.XYAndInteractNPC(-8394, -9801)
+    if current_kurzick >= current_luxon:
+        bot.Multibox.SendDialogToTarget(0x84) # This will bribe the priest in case kurzick is greater or equal than luxon
     bot.Multibox.SendDialogToTarget(0x86) #Get Bounty
     bot.States.AddHeader("Start Combat") #3
     bot.Multibox.UseAllConsumables()

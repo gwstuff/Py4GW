@@ -11,6 +11,9 @@ from Py4GWCoreLib.enums import SharedCommandType
 from Py4GWCoreLib import ConsoleLog, Console
 from Py4GWCoreLib.Player import Player
 from Py4GWCoreLib.Map import Map
+from Py4GWCoreLib.GlobalCache.SharedMemory import (
+    AccountStruct,
+)
 
 #region Multibox
 class _Multibox:
@@ -22,39 +25,40 @@ class _Multibox:
         
 
     class _AccountData:
-        def __init__(self, account_data):
+        def __init__(self, account_data:AccountStruct):
             self.SlotNumber = account_data.SlotNumber
             self.IsSlotActive = account_data.IsSlotActive
             self.AccountEmail = account_data.AccountEmail
             self.AccountName = account_data.AccountName
-            self.CharacterName = account_data.CharacterName
+            self.CharacterName = account_data.AgentData.CharacterName
             self.IsAccount = account_data.IsAccount
             self.IsHero = account_data.IsHero
             self.IsPet = account_data.IsPet
             self.IsNPC = account_data.IsNPC
-            self.OwnerPlayerID = account_data.OwnerPlayerID
-            self.HeroID = account_data.HeroID
-            self.MapID = account_data.MapID
-            self.MapRegion = account_data.MapRegion
-            self.MapDistrict = account_data.MapDistrict
-            self.PlayerID = account_data.PlayerID
-            self.PlayerHP = account_data.PlayerHP
-            self.PlayerMaxHP = account_data.PlayerMaxHP
-            self.PlayerHealthRegen = account_data.PlayerHealthRegen
-            self.PlayerEnergy = account_data.PlayerEnergy
-            self.PlayerMaxEnergy = account_data.PlayerMaxEnergy
-            self.PlayerEnergyRegen = account_data.PlayerEnergyRegen
-            self.PlayerPosX = account_data.PlayerPosX
-            self.PlayerPosY = account_data.PlayerPosY
-            self.PlayerPosZ = account_data.PlayerPosZ
-            self.PlayerFacingAngle = account_data.PlayerFacingAngle
-            self.PlayerTargetID = account_data.PlayerTargetID
-            self.PlayerLoginNumber = account_data.PlayerLoginNumber
-            self.PlayerIsTicked = account_data.PlayerIsTicked
-            self.PartyID = account_data.PartyID
-            self.PartyPosition = account_data.PartyPosition
-            self.PlayerIsPartyLeader = account_data.PlayerIsPartyLeader
-            self.PlayerBuffs = list(account_data.PlayerBuffs)
+            self.OwnerPlayerID = account_data.AgentData.OwnerAgentID
+            self.HeroID = account_data.AgentData.HeroID
+            self.MapID = account_data.AgentData.Map.MapID
+            self.MapRegion = account_data.AgentData.Map.Region
+            self.MapDistrict = account_data.AgentData.Map.District
+            self.MapLanguage = account_data.AgentData.Map.Language
+            self.PlayerID = account_data.AgentData.AgentID
+            self.PlayerHP = account_data.AgentData.Health.Current
+            self.PlayerMaxHP = account_data.AgentData.Health.Max
+            self.PlayerHealthRegen = account_data.AgentData.Health.Regen
+            self.PlayerEnergy = account_data.AgentData.Energy.Current
+            self.PlayerMaxEnergy = account_data.AgentData.Energy.Max
+            self.PlayerEnergyRegen = account_data.AgentData.Energy.Regen
+            self.PlayerPosX = account_data.AgentData.Pos.x
+            self.PlayerPosY = account_data.AgentData.Pos.y
+            self.PlayerPosZ = account_data.AgentData.Pos.z
+            self.PlayerFacingAngle = account_data.AgentData.RotationAngle
+            self.PlayerTargetID = account_data.AgentData.TargetID
+            self.PlayerLoginNumber = account_data.AgentData.LoginNumber
+            self.PlayerIsTicked = account_data.AgentPartyData.IsTicked
+            self.PartyID = account_data.AgentPartyData.PartyID
+            self.PartyPosition = account_data.AgentPartyData.PartyPosition
+            self.PlayerIsPartyLeader = account_data.AgentPartyData.IsPartyLeader            
+            self.PlayerBuffs = account_data.AgentData.Buffs.Buffs
             self.LastUpdated = account_data.LastUpdated
 
         
@@ -62,7 +66,7 @@ class _Multibox:
         class HeroAIOptions:
             def __init__(self, email: str):
                 from ...GlobalCache import GLOBAL_CACHE
-                hero_ai_options = GLOBAL_CACHE.ShMem.GetHeroAIOptions(email)
+                hero_ai_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(email)
 
                 self.email = hero_ai_options.Email if hero_ai_options else email
                 self.Following = hero_ai_options.Following if hero_ai_options else False
@@ -90,7 +94,7 @@ class _Multibox:
 
         def _set_hero_ai_options_by_email(self, email: str, option: str, value: Any, skill_index:int =0):
             from ...GlobalCache import GLOBAL_CACHE
-            current_options = GLOBAL_CACHE.ShMem.GetHeroAIOptions(email)
+            current_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(email)
             if not current_options:
                 return
 
@@ -107,7 +111,7 @@ class _Multibox:
             current_options.FlagPosY = value if option == "FlagPosY" else current_options.FlagPosY
             current_options.FlagFacingAngle = value if option == "FlagFacingAngle" else current_options.FlagFacingAngle
 
-            result = GLOBAL_CACHE.ShMem.SetHeroAIOptions(email, current_options)
+            result = GLOBAL_CACHE.ShMem.SetHeroAIOptionsByEmail(email, current_options)
             return result
         
     def _get_all_account_data(self) -> List[_AccountData]:
@@ -150,10 +154,11 @@ class _Multibox:
         for account in all_accounts:
             if (player_data.MapID == account.MapID and
                 player_data.MapRegion == account.MapRegion and
-                player_data.MapDistrict == account.MapDistrict):
+                player_data.MapDistrict == account.MapDistrict and
+                player_data.MapLanguage == account.MapLanguage):
                 continue
 
-            GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.TravelToMap, (player_data.MapID, player_data.MapRegion, player_data.MapDistrict, 0))
+            GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.TravelToMap, (player_data.MapID, player_data.MapRegion, player_data.MapDistrict, player_data.MapLanguage))
             yield from Routines.Yield.wait(500)
         yield
 
@@ -168,10 +173,11 @@ class _Multibox:
         
         if (player_data.MapID == account.MapID and
             player_data.MapRegion == account.MapRegion and
-            player_data.MapDistrict == account.MapDistrict):
+            player_data.MapDistrict == account.MapDistrict and
+            player_data.MapLanguage == account.MapLanguage):
             return
 
-        GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.TravelToMap, (player_data.MapID, player_data.MapRegion, player_data.MapDistrict, 0))
+        GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.TravelToMap, (player_data.MapID, player_data.MapRegion, player_data.MapDistrict, player_data.MapLanguage))
         yield from  Routines.Yield.wait(500)
         
     def _invite_all_accounts(self):
@@ -187,6 +193,7 @@ class _Multibox:
             if (player_data.MapID == account.MapID and
                 player_data.MapRegion == account.MapRegion and
                 player_data.MapDistrict == account.MapDistrict and
+                player_data.MapLanguage == account.MapLanguage and
                 player_data.PartyID != account.PartyID):
                 GLOBAL_CACHE.Party.Players.InvitePlayer(account.CharacterName)
                 GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.InviteToParty, (0,0,0,0))
@@ -205,6 +212,7 @@ class _Multibox:
         if (player_data.MapID == account.MapID and
             player_data.MapRegion == account.MapRegion and
             player_data.MapDistrict == account.MapDistrict and
+            player_data.MapLanguage == account.MapLanguage and
             player_data.PartyID != account.PartyID):
             GLOBAL_CACHE.Party.Players.InvitePlayer(account.CharacterName)
             GLOBAL_CACHE.ShMem.SendMessage(player_data.AccountEmail, account.AccountEmail, SharedCommandType.InviteToParty, (0,0,0,0))
@@ -279,10 +287,10 @@ class _Multibox:
             if sender_email == account.AccountEmail:
                 continue
             
-            if not current_map == account.MapID:
+            if not current_map == account.AgentData.Map.MapID:
                 continue
             
-            account_name = account.CharacterName
+            account_name = account.AgentData.CharacterName
             if account_name not in player_names:
                 continue 
             
@@ -310,10 +318,10 @@ class _Multibox:
             if sender_email == account.AccountEmail:
                 continue
 
-            if not current_map == account.MapID:
+            if not current_map == account.AgentData.Map.MapID:
                 continue
 
-            account_name = account.CharacterName
+            account_name = account.AgentData.CharacterName
             if account_name not in player_names:
                 continue
 

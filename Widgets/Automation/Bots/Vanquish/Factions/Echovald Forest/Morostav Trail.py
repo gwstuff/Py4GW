@@ -2,6 +2,8 @@ from Py4GWCoreLib import Botting, Routines, GLOBAL_CACHE, ModelID, Agent, Player
 import Py4GW
 import os
 BOT_NAME = "VQ Morostav Trail"
+MODULE_NAME = "Morostav Trail (Vanquish)"
+MODULE_ICON = "Textures\\Module_Icons\\Vanquish - Morostav Trail.png"
 TEXTURE = os.path.join(Py4GW.Console.get_projects_path(), "Sources", "ApoSource", "textures", "VQ_Helmet.png")
 UNWAKING_WATERS = 298 #Unwaking Waters
 MOROSTAV_TRAIL = 205
@@ -123,7 +125,14 @@ def bot_routine(bot: Botting) -> None:
     bot.Party.SetHardMode(True)
     bot.Move.XYAndExitMap(-14168,-8050,MOROSTAV_TRAIL) #Morostav Trail exit to Unwaking Waters
     bot.Wait.ForTime(4000)
+    
+    # Check faction allegiance and get blessing if needed
+    current_luxon = Player.GetLuxonData()[0]
+    current_kurzick = Player.GetKurzickData()[0]
+    
     bot.Move.XYAndInteractNPC(22155.34, 12125.13)
+    if current_luxon >= current_kurzick:
+        bot.Multibox.SendDialogToTarget(0x84) # This will bribe the priest in case luxon is greater or equal than kurzick
     bot.Multibox.SendDialogToTarget(0x86) #Get Bounty
     bot.States.AddHeader("Start Combat") #3
     #bot.Multibox.UseAllConsumables()

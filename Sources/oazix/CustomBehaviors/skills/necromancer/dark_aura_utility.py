@@ -1,6 +1,9 @@
 from typing import List, Any, Generator, Callable, override
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, Range
+import PyImGui
+
+from Py4GWCoreLib import GLOBAL_CACHE, Player, Routines, Range
+from Sources.oazix.CustomBehaviors.PersistenceLocator import PersistenceLocator
 from Sources.oazix.CustomBehaviors.primitives.behavior_state import BehaviorState
 from Sources.oazix.CustomBehaviors.primitives.bus.event_bus import EventBus
 from Sources.oazix.CustomBehaviors.primitives.helpers import custom_behavior_helpers
@@ -13,16 +16,7 @@ from Sources.oazix.CustomBehaviors.primitives.skills.bonds.custom_buff_target_pe
 from Sources.oazix.CustomBehaviors.primitives.skills.custom_skill import CustomSkill
 from Sources.oazix.CustomBehaviors.primitives.skills.custom_skill_utility_base import CustomSkillUtilityBase
 
-
 class DarkAuraUtility(CustomSkillUtilityBase):
-    """
-    Dark_Aura utility that uses the Buff configuration helper (CustomBuffMultipleTarget).
-    The aura will consider enemy player agents that:
-      - are players (GLOBAL_CACHE.Agent.IsPlayer)
-      - have the 'Soul_Taker' enchantment (GLOBAL_CACHE.Buffs.HasEnchantment)
-      - match the buff_configuration's agent predicate (self.buff_configuration.get_agent_id_predicate())
-    Scoring is based on how many such agents are within the Dark_Aura AoE.
-    """
 
     def __init__(self,
                  event_bus: EventBus,
@@ -41,18 +35,29 @@ class DarkAuraUtility(CustomSkillUtilityBase):
             allowed_states=allowed_states)
 
         self.score_definition: ScorePerAgentQuantityDefinition = score_definition
+
         # Use the buff configuration helper. Choose a sensible default config; change to per-profession if desired.
-        self.buff_configuration: CustomBuffMultipleTarget = CustomBuffMultipleTarget(
-            event_bus,
-            self.custom_skill,
-            buff_configuration_per_profession=BuffConfigurationPerProfession.BUFF_CONFIGURATION_ALL
-        )
+        data: str | None = PersistenceLocator().skills.read(self.custom_skill.skill_name, "buff_configuration")
+        if data is not None:
+            self.buff_configuration: CustomBuffMultipleTarget = CustomBuffMultipleTarget.instanciate_from_string(self.event_bus, self.custom_skill, data)
+        else:
+            self.buff_configuration: CustomBuffMultipleTarget = CustomBuffMultipleTarget(
+                event_bus,
+                self.custom_skill,
+                buff_configuration_per_profession=BuffConfigurationPerProfession.BUFF_CONFIGURATION_ALL
+            )
+
+        self.soul_taker_skill = CustomSkill("Soul_Taker")
+        self.masochism_skill = CustomSkill("Masochism")
 
     def _get_target(self) -> int | None:
 
+        has_soul_taker_or_masochism = lambda agent_id: custom_behavior_helpers.Resources.is_ally_under_specific_effect(agent_id, self.soul_taker_skill.skill_id) or custom_behavior_helpers.Resources.is_ally_under_specific_effect(agent_id, self.masochism_skill.skill_id)
+        has_not_dark_aura = lambda agent_id: not custom_behavior_helpers.Resources.is_ally_under_specific_effect(agent_id, self.custom_skill.skill_id)
+
         target = custom_behavior_helpers.Targets.get_first_or_default_from_allies_ordered_by_priority(
-                within_range=Range.Spellcast.value * 1.2,
-                condition=lambda agent_id: self.buff_configuration.get_agent_id_predicate()(agent_id),
+                within_range=Range.Spellcast.value * 1.5,
+                condition=lambda agent_id: self.buff_configuration.get_agent_id_predicate()(agent_id) and has_soul_taker_or_masochism(agent_id) and has_not_dark_aura(agent_id) and Player.GetAgentID() != agent_id,
                 sort_key=(TargetingOrder.DISTANCE_ASC,),
                 range_to_count_enemies=None,
                 range_to_count_allies=None)
@@ -77,3 +82,30 @@ class DarkAuraUtility(CustomSkillUtilityBase):
     @override
     def get_buff_configuration(self) -> CustomBuffMultipleTarget | None:
         return self.buff_configuration
+    
+    @override
+    def customized_debug_ui(self, current_state: BehaviorState) -> None:
+        target = self._get_target()
+        if target is not None:
+            PyImGui.bullet_text(f"target : {target}")
+        else:
+            PyImGui.bullet_text(f"no target found")
+
+    @override
+    def has_persistence(self) -> bool:
+        return True
+
+    @override
+    def persist_configuration_for_account(self):
+        PersistenceLocator().skills.write_for_account(str(self.custom_skill.skill_name), "buff_configuration", self.buff_configuration.serialize_to_string())
+        print("configuration saved for account")
+
+    @override
+    def persist_configuration_as_global(self):
+        PersistenceLocator().skills.write_global(str(self.custom_skill.skill_name), "buff_configuration", self.buff_configuration.serialize_to_string())
+        print("configuration saved as global")
+
+    @override
+    def delete_persisted_configuration(self):
+        PersistenceLocator().skills.delete(str(self.custom_skill.skill_name), "buff_configuration")
+        print("configuration deleted")

@@ -108,6 +108,15 @@ class Console:
     def defer_stop_load_and_run(path: str, delay_ms: int = 1000) -> None: ...
     @staticmethod
     def defer_stop_and_run(delay_ms: int = 1000) -> None: ...
+    
+    @staticmethod
+    def get_profiler_metric_names() -> list[str]: ...
+    @staticmethod
+    def get_profiler_reports() -> list[tuple[str,float, float, float, float, float, float]]: ...
+    @staticmethod
+    def get_profiler_history(name: str) -> list[float]: ...
+    @staticmethod
+    def clear_profiler_history() -> None: ...
 
 
 class PingHandler:
@@ -166,6 +175,34 @@ class Game:
         -------
         int
             The current tick count in milliseconds since system boot.
+        """
+        ...
+
+    @staticmethod
+    def get_shared_memory_name() -> str:
+        """
+        Get the current per-process runtime shared-memory name.
+        """
+        ...
+
+    @staticmethod
+    def get_shared_memory_size() -> int:
+        """
+        Get the runtime shared-memory region size in bytes.
+        """
+        ...
+
+    @staticmethod
+    def is_shared_memory_ready() -> bool:
+        """
+        Check whether the runtime shared-memory region is active.
+        """
+        ...
+
+    @staticmethod
+    def get_shared_memory_sequence() -> int:
+        """
+        Get the current sequence value for the runtime shared-memory region.
         """
         ...
 

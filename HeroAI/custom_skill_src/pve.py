@@ -66,7 +66,7 @@ class PVESkills:
         skill.SkillType = SkillType.Enchantment.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
-        skill.Conditions.IsOutOfCombat = True
+        skill.Conditions.IsOutOfCombat = False
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -246,6 +246,14 @@ class PVESkills:
         #region SUNSPEAR
 
         skill = CustomSkill()
+        skill.SkillID = 1417  # Vial of Purified Water - priority hex vs Harbingers
+        skill.SkillType = SkillType.Hex.value
+        skill.TargetAllegiance = Skilltarget.Enemy.value
+        skill.Nature = SkillNature.CustomA.value
+        skill.Conditions.UniqueProperty = True
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Theres_Nothing_to_Fear")
         skill.SkillType = SkillType.Shout.value
         skill.TargetAllegiance = Skilltarget.Self.value
@@ -297,6 +305,7 @@ class PVESkills:
         skill.SkillType = SkillType.Skill.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
+        skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -329,6 +338,7 @@ class PVESkills:
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
+        skill.Conditions.UniqueProperty = True  # Requires melee weapon (not Bow or Spear)
         skill_data[skill.SkillID] = skill
 
         #region LIGHTBRINGER
@@ -565,7 +575,7 @@ class PVESkills:
         skill.SkillType = SkillType.Ward.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
-        skill.Conditions.EnemiesInRange = 3
+        skill.Conditions.EnemiesInRange = 1
         skill.Conditions.EnemiesInRangeArea = Range.Area.value
         skill_data[skill.SkillID] = skill
 
@@ -724,6 +734,67 @@ class PVESkills:
         skill.SkillType = SkillType.Form.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Offensive.value
+        skill.Conditions.UniqueProperty = True
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = GLOBAL_CACHE.Skill.GetID("Ursan_Strike")
+        skill.SkillType = SkillType.Skill.value
+        skill.TargetAllegiance = Skilltarget.Enemy.value
+        skill.Nature = SkillNature.Offensive.value
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = GLOBAL_CACHE.Skill.GetID("Ursan_Rage")
+        skill.SkillType = SkillType.Skill.value
+        skill.TargetAllegiance = Skilltarget.EnemyClustered.value
+        skill.Nature = SkillNature.OffensiveA.value
+        skill.Conditions.EnemiesInRange = 2
+        skill.Conditions.EnemiesInRangeArea = Range.Adjacent.value
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = GLOBAL_CACHE.Skill.GetID("Ursan_Roar")
+        skill.SkillType = SkillType.Shout.value
+        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.Nature = SkillNature.Offensive.value
+        skill.Conditions.EnemiesInRange = 1
+        skill.Conditions.EnemiesInRangeArea = Range.Nearby.value
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = GLOBAL_CACHE.Skill.GetID("Ursan_Force")
+        skill.SkillType = SkillType.Skill.value
+        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.Nature = SkillNature.Buff.value
+        skill.Conditions.IsMoving = True
+        skill.Conditions.IsOutOfCombat = True
+        #skill.Conditions.UniqueProperty = True
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = GLOBAL_CACHE.Skill.GetID("Ursan_Aura")
+        skill.SkillType = SkillType.Form.value
+        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.Nature = SkillNature.Buff.value
+        skill.Conditions.UniqueProperty = True
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = 2395  # Ursan Roar (Blood Washes Blood)
+        skill.SkillType = SkillType.Skill.value
+        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.Nature = SkillNature.Offensive.value
+        skill.Conditions.UniqueProperty = True
+        skill_data[skill.SkillID] = skill
+
+        skill = CustomSkill()
+        skill.SkillID = 2396  # Ursan Force (Blood Washes Blood)
+        skill.SkillType = SkillType.Skill.value
+        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.Nature = SkillNature.Buff.value
+        skill.Conditions.IsOutOfCombat = True
+        #skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()

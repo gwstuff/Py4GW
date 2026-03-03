@@ -3,6 +3,7 @@ import threading
 
 from typing import Callable, override
 from Py4GWCoreLib import GLOBAL_CACHE, ThrottledTimer, Agent
+from Py4GWCoreLib.GlobalCache.shared_memory_src.AccountStruct import AccountStruct
 from Py4GWCoreLib.Routines import Routines
 from Py4GWCoreLib import Player
 from Sources.oazix.CustomBehaviors.primitives.helpers import custom_behavior_helpers
@@ -26,17 +27,30 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
     account's email address for a given agent_id.
     """
 
-    def __init__(self, custom_skill: CustomSkill):
+    def __init__(self, custom_skill: CustomSkill, custom_configuration: dict[str, BuffEmailEntry] | None = None):
 
         self.custom_skill: CustomSkill = custom_skill
         self.__lock = threading.RLock()
 
-        # Single dictionary storing state per email
-        self.__entries_by_email: dict[str, BuffEmailEntry] = {}
+        if custom_configuration is not None:
+            self.__entries_by_email = custom_configuration
+        else:
+            self.__entries_by_email: dict[str, BuffEmailEntry] = {}
 
         # Throttled timers for periodic refresh
         self.__scan_timer = ThrottledTimer(3000)    # scan accounts every 3s
         self.__refresh_timer = ThrottledTimer(2000) # refresh char/prof every 2s
+
+    def serialize_to_string(self) -> str:
+        return ";".join([f"{entry.account_email}:{entry.is_activated}" for entry in self.__entries_by_email.values()])
+    
+    @staticmethod
+    def instanciate_from_string(serialized_string: str) -> dict[str, BuffEmailEntry]:
+        deserialized_configuration: dict[str, BuffEmailEntry] = {}
+        for configuration in serialized_string.split(";"):
+            email, is_activated = configuration.split(":")
+            deserialized_configuration[email] = BuffEmailEntry(email, is_activated == "True")
+        return deserialized_configuration
 
     def get_by_email(self, email: str) -> BuffEmailEntry:
         with self.__lock:
@@ -107,8 +121,8 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
             pass
         try:
             for account in GLOBAL_CACHE.ShMem.GetAllAccountData():
-                if int(getattr(account, "PlayerID", 0) or 0) == int(agent_id):
-                    return getattr(account, "AccountEmail", None)
+                if account.AgentData.AgentID == int(agent_id):
+                    return account.AccountEmail
         except Exception:
             pass
         return None
@@ -116,11 +130,11 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
     def __get_char_and_prof_for_email(self, email: str) -> tuple[str | None, str | None, int | None]:
         """Return (character_name, profession_prefix, agent_id) for the given email using one lookup."""
         try:
-            account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(email)
+            account: AccountStruct | None = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(email)
             if account is None:
                 return None, None, None
-            char_name = getattr(account, "CharacterName", None)
-            agent_id_int = int(getattr(account, "PlayerID", 0) or 0)
+            char_name = account.AgentData.CharacterName
+            agent_id_int = account.AgentData.AgentID
             agent_id: int | None = agent_id_int if agent_id_int > 0 else None
             prof_prefix: str | None = None
             if agent_id:
@@ -160,10 +174,10 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
             # Map emails to their current primary profession IDs
             email_to_prof_id: dict[str, int] = {}
             for acc in GLOBAL_CACHE.ShMem.GetAllAccountData():
-                email = getattr(acc, "AccountEmail", "")
+                email = acc.AccountEmail
                 if not email:
                     continue
-                agent_id = int(getattr(acc, "PlayerID", 0) or 0)
+                agent_id = acc.AgentData.AgentID
                 if agent_id <= 0:
                     continue
                 try:
@@ -194,9 +208,9 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
             for email in emails:
                 new_id: int | None = None
                 try:
-                    account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(email)
+                    account : AccountStruct | None = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(email)
                     if account is not None:
-                        val = int(getattr(account, "PlayerID", 0) or 0)
+                        val = account.AgentData.AgentID
                         new_id = val if val > 0 else None
                 except Exception:
                     new_id = None
@@ -208,7 +222,7 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
         except Exception:
             pass
 
-    def render_buff_configuration(self,  py4gw_root_directory: str):
+    def render_buff_configuration(self):
         """Render toggle buttons per account email.
         - Every 3s: scan SharedMemory accounts and add missing emails (default deactivated)
         - Every 2s: refresh character name and profession prefix per email
@@ -221,14 +235,14 @@ class BuffConfigurationPerPlayerEmail(CustomBuffTarget):
         # Periodic: discover new accounts (3s)
         if self.__scan_timer.IsExpired():
             try:
-                accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
+                accounts : list[AccountStruct] = GLOBAL_CACHE.ShMem.GetAllAccountData()
                 with self.__lock:
                     for acc in accounts:
-                        email = getattr(acc, "AccountEmail", "")
+                        email = acc.AccountEmail
                         if not email:
                             continue
                         if email not in self.__entries_by_email:
-                            agent_id = int(getattr(acc, "PlayerID", 0) or 0)
+                            agent_id = acc.AgentData.AgentID
                             self.__entries_by_email[email] = BuffEmailEntry(
                                 account_email=email,
                                 is_activated=False,

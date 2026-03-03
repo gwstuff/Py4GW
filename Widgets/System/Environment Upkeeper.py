@@ -1,9 +1,11 @@
 import PyImGui
 from Py4GWCoreLib import *
+from Py4GWCoreLib.HotkeyManager import HOTKEY_MANAGER
 
 
 #do not ever disable this module, it is the main module for everything
 MODULE_NAME = "Environment Upkeeper"
+MODULE_ICON = "Textures/Module_Icons/Environment Upkeeper.png"
 OPTIONAL = False
 
 __widget__ = {
@@ -87,14 +89,10 @@ def tooltip():
 def main():
     global widget_config
 
-    GLOBAL_CACHE._update_cache()
-    account_email = Player.GetAccountEmail()
-    GLOBAL_CACHE.ShMem.SetPlayerData(account_email)
-    GLOBAL_CACHE.ShMem.SetHeroesData()
-    GLOBAL_CACHE.ShMem.SetPetData()
+    HOTKEY_MANAGER.update()
     
     if Routines.Checks.Map.MapValid():
-        GLOBAL_CACHE.ShMem.UpdateTimeouts()
+        GLOBAL_CACHE._update_cache()
     else:
         LootConfig().ClearItemIDBlacklist()
     

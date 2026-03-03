@@ -24,8 +24,13 @@ class InventoryConfig:
     def __init__(self):
         self.leave_free_slots = 5
         self.keep_id_kit = 2
-        self.keep_salvage_kit = 5
         self.keep_gold_amount = 5000
+        self.rare_items_to_keep = [ 
+            RareItems.GLACIAL_BLADE, 
+            RareItems.GLACIAL_BLADE_PURPLE, 
+            RareItems.GLACIAL_BLADES,
+            RareItems.DARKSTEEL_LONGBOW
+        ]
 
 class SellConfig:
     def __init__(self):
@@ -42,18 +47,6 @@ class RareItems(IntEnum):
     GLACIAL_BLADE_PURPLE = 2509
     GLACIAL_BLADES = 2474
     DARKSTEEL_LONGBOW = 2472
-        
-class SalvageConfig:
-    def __init__(self):
-        self.salvage_purples = True
-        self.salvage_golds = False
-        self.rare_items_to_keep = [ 
-            RareItems.GLACIAL_BLADE, 
-            RareItems.GLACIAL_BLADE_PURPLE, 
-            RareItems.GLACIAL_BLADES,
-            RareItems.DARKSTEEL_LONGBOW
-        ]
-
 #endregion
 
 #region Helpers
@@ -140,7 +133,6 @@ class BorealChestRunner():
         self.inventory_config = InventoryConfig()
         self.sell_config = SellConfig()
         self.id_config = IDConfig()
-        self.salvage_config = SalvageConfig()
         self.path_points = PathPoints()
         self.run_stats = RunStats()
         self.body_block_helper = BodyBlockHelper()
@@ -210,7 +202,6 @@ class BorealChestRunner():
                 self.log_level = PyImGui.combo("Log Level", self.log_level, ["Debug", "Info", "Warning", "Error"])
                 self.chest_number_target = PyImGui.combo("Chest target", self.chest_number_target-1, ["1", "2", "3"])+1
                 self.id_config.id_golds = PyImGui.checkbox("ID Golds", self.id_config.id_golds)
-                self.salvage_config.salvage_golds = PyImGui.checkbox("Salvage Golds", self.salvage_config.salvage_golds)
 
                 # Display run stats
                 if PyImGui.collapsing_header("Run stats", PyImGui.TreeNodeFlags.DefaultOpen):
@@ -224,7 +215,6 @@ class BorealChestRunner():
                     PyImGui.text(f"Runs with 3 chests: {self.run_stats.three_chest_cnt} ({self.run_stats.three_chest_pct:.1f}%)")
                     PyImGui.text(f"Total gold earned: {self.run_stats.total_gold_earned}")
                     PyImGui.text(f"Total gold items identified: {self.run_stats.total_gold_items_identified}")
-                    PyImGui.text(f"Total items salvaged: {self.run_stats.total_items_salvaged}")
 
                 button_text = "Start script" if not self.is_script_running else "Stop script"
                 if PyImGui.button(button_text):
@@ -404,17 +394,6 @@ class BorealChestRunner():
         id_kits_to_buy = self.inventory_config.keep_id_kit - count_of_id_kits
         return id_kits_to_buy
     
-    def get_salvage_kits_to_buy(self):
-        count_of_salvage_kits = Inventory.GetModelCount(ModelID.Salvage_Kit.value) #2992 model for salvage kit
-        salvage_kits_to_buy = self.inventory_config.keep_salvage_kit - count_of_salvage_kits
-        return salvage_kits_to_buy
-
-    def get_materials_to_sell(self):
-        bags_to_check = ItemArray.CreateBagList(1, 2, 3, 4)
-        bag_item_array = ItemArray.GetItemArray(bags_to_check)
-        materials_to_sell = ItemArray.Filter.ByCondition(bag_item_array, lambda item_id: Item.Type.IsMaterial(item_id))
-        return materials_to_sell
-    
     def get_items_to_identify(self):
         bags_to_check = ItemArray.CreateBagList(1, 2, 3, 4)
         bag_item_array = ItemArray.GetItemArray(bags_to_check)
@@ -427,31 +406,37 @@ class BorealChestRunner():
         
         return items_to_identify if len(items_to_identify) > 0 else []
 
-    def item_is_rare(self, item_id):
-        rare_enum = next((x for x in self.salvage_config.rare_items_to_keep if x == item_id), None)
+    def item_is_super_rare(self, item_id):
+        rare_enum = next((x for x in self.inventory_config.rare_items_to_keep if x == item_id), None)
         if not rare_enum:
             return False
 
         ConsoleLog(self.bot_name, f"Keeping rare item: {rare_enum.name}", Console.MessageType.Success)
         return True
-
-    def get_items_to_salvage(self):
+    
+    def get_items_to_sell_and_keep_super_rare_items(self):
         bags_to_check = ItemArray.CreateBagList(1, 2, 3, 4)
         bag_item_array = ItemArray.GetItemArray(bags_to_check)
+        banned_models = {ModelID.Salvage_Kit.value,ModelID.Superior_Identification_Kit.value,ModelID.Lockpick.value}
 
-        in_excepted_items = lambda item_id: (
-            self.item_is_rare(item_id) # Don't salvage rare items
-            or (Item.Rarity.IsGold(item_id) and not self.salvage_config.salvage_golds) # Remove gold items if configured not to salvage them
-        )
-
-        items_to_salvage = ItemArray.Filter.ByCondition(bag_item_array, lambda item_id: (
-            Item.Usage.IsSalvageable(item_id) 
-            and (Item.Usage.IsIdentified(item_id)
-                or Item.Rarity.IsWhite(item_id)) 
-            and not in_excepted_items(item_id)
-        ))
-
-        return items_to_salvage
+        items_to_sell = ItemArray.Filter.ByCondition(
+            bag_item_array,
+            lambda item_id: 
+                not self.item_is_super_rare(item_id) 
+                and not self.item_is_super_rare(Item.GetModelID(item_id)) 
+                and Item.GetModelID(item_id) not in banned_models 
+                and Item.Usage.IsIdentified(item_id))
+        
+        return items_to_sell
+    
+    def sell_items(self):
+        items_to_sell = self.get_items_to_sell_and_keep_super_rare_items()
+        if len(items_to_sell) < 1:
+            return
+        
+        log_to_console = self.log_to_console
+        self.log_info(f"Selling {len(items_to_sell)} items.")
+        yield from Routines.Yield.Merchant.SellItems(items_to_sell, log_to_console)
           
     def get_items_to_deposit(self):
         bags_to_check = ItemArray.CreateBagList(1,2,3,4)
@@ -463,17 +448,13 @@ class BorealChestRunner():
     def needs_to_handle_inventory(self):
         free_slots_in_inventory = Inventory.GetFreeSlotCount()
         count_of_id_kits = Inventory.GetModelCount(ModelID.Superior_Identification_Kit.value) #5899 model for ID kit
-        count_of_salvage_kits = Inventory.GetModelCount(ModelID.Salvage_Kit.value) #2992 model for salvage kit
-        
+
         needs_to_handle_inventory = False
         if free_slots_in_inventory < self.inventory_config.leave_free_slots:
             self.log_info("Fewer free slots than configured minimum")
             needs_to_handle_inventory = True
         if count_of_id_kits < self.inventory_config.keep_id_kit:
             self.log_info("Fewer id kits than configured minimum")
-            needs_to_handle_inventory = True
-        if count_of_salvage_kits < self.inventory_config.keep_salvage_kit:
-            self.log_info("Fewer salvage kits than configured minimum")
             needs_to_handle_inventory = True
         
         return needs_to_handle_inventory
@@ -514,12 +495,12 @@ class BorealChestRunner():
             self.log_info("Going to merchant.")
         yield from Routines.Yield.Agents.InteractWithAgentXY(7395, -24899, timeout_ms=15000)
 
-    def buy_id_and_salvage_kits(self):
+    def buy_id_kits(self):
         log_to_console = self.log_to_console
         if log_to_console:
-            self.log_info("Buying ID and Salvage kits.")
+            self.log_info("Buying ID kits.")
         yield from Routines.Yield.Merchant.BuyIDKits(self.get_id_kits_to_buy(),log_to_console)
-        yield from Routines.Yield.Merchant.BuySalvageKits(self.get_salvage_kits_to_buy(),log_to_console)
+        yield from Routines.Yield.wait(2500)
 
     def identify_items(self):
         items_to_idenfity = self.get_items_to_identify()
@@ -531,49 +512,24 @@ class BorealChestRunner():
         yield from Routines.Yield.Items.IdentifyItems(items_to_idenfity, log_to_console)
         self.run_stats.total_gold_items_identified += len([x for x in items_to_idenfity if Item.Rarity.IsGold(x)])
 
-    def salvage_items(self):
-        items_to_salvage = self.get_items_to_salvage()
-        if len(items_to_salvage) < 1:
-            return
-        
-        log_to_console = self.log_to_console
-        if log_to_console:
-            self.log_info(f"Salvaging {len(items_to_salvage)} items.")
-        yield from Routines.Yield.Items.SalvageItems(items_to_salvage, log_to_console, wait_time_between_items_ms=self.get_current_ping_based_throttle_value())
-        
-        items_to_salvage_after_first_pass = self.get_items_to_salvage()
-        if len(items_to_salvage_after_first_pass) > 0:
-            self.log_debug(f"Salvaging {len(items_to_salvage_after_first_pass)} items again after first salvage pass.")
-            yield from Routines.Yield.Items.SalvageItems(items_to_salvage_after_first_pass, log_to_console, wait_time_between_items_ms=self.get_max_ping_based_throttle_value())
-        
-        self.run_stats.total_items_salvaged += len(items_to_salvage)
-
-    def sell_materials(self):
-        log_to_console = self.log_to_console
-
-        if self.sell_config.sell_materials:
-            self.log_info("Selling materials.")
-            items_to_sell = self.get_materials_to_sell()
-            yield from Routines.Yield.Merchant.SellItems(items_to_sell, log_to_console)
-
     def deposit_gold(self):
         log_to_console = self.log_to_console
         self.log_info("Depositing gold.")
-        yield from Routines.Yield.wait(250)
-        gold_before_deposit = Inventory.GetGoldOnCharacter()
+        # Wait a few seconds before depositing to allow gold from selling to be added to inventory
+        yield from Routines.Yield.wait(3000)
+        gold_before_deposit = GLOBAL_CACHE.Inventory.GetGoldOnCharacter()
         deposited = yield from Routines.Yield.Items.DepositGold(self.inventory_config.keep_gold_amount, log=log_to_console)
-        yield from Routines.Yield.wait(1000)
-        gold_after_deposit = Inventory.GetGoldOnCharacter()
-        self.run_stats.total_gold_earned += (gold_before_deposit - gold_after_deposit) if deposited else 0
+        if not deposited:
+            return
+        self.run_stats.total_gold_earned += gold_before_deposit - self.inventory_config.keep_gold_amount
 
     def handle_inventory(self):
         """Handles inventory by going to merchant, buying kits, identifying, salvaging, selling, depositing gold and items."""
         yield from self.go_to_merchant()
-        yield from self.buy_id_and_salvage_kits()
+        yield from self.buy_id_kits()
         yield from self.identify_items()
-        yield from self.salvage_items()
-        yield from self.sell_materials()
-        yield from self.buy_id_and_salvage_kits()
+        yield from self.sell_items()
+        yield from self.buy_id_kits()
         yield from self.deposit_gold()
         more_free_slots_available = yield from self.deposit_items_to_storage()
         
